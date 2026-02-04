@@ -1,0 +1,14 @@
+{
+  "name": "b0k3ts Golang Dev Container",
+  "image": "golang:1.25.6",
+  "workspaceFolder": "/app",
+  "containerEnv": {
+    "GOROOT": "/usr/local/go"
+  },
+  "forwardPorts": [
+    "0-0-0-0:4201"
+  ],
+
+  "postCreateCommand": "git config --global --add safe.directory /app && git config --global user.name 'Juan Felix-Falcon' && git config --global user.email jfelixfalcon@gmail.com"
+
+}

@@ -1,0 +1,13 @@
+{
+  "name": "b0k3ts UI Angular Node Dev Container",
+  "image": "node:24.0.0",
+  "workspaceFolder": "/app",
+  "forwardPorts": [4200],
+  "portsAttributes": {
+    "4200": {
+      "visibility": "public"
+    }
+  },
+  "postCreateCommand": "npm install -g @angular/cli && git config --global --add safe.directory /app && git config --global user.name 'Juan Felix-Falcon' && git config --global user.email jfelixfalcon@gmail.com"
+
+}
