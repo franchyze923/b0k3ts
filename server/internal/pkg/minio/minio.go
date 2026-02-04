@@ -1,18 +1,24 @@
 package minio
 
 import (
+	"b0k3ts/configs"
+	"b0k3ts/internal/pkg/auth"
+	"b0k3ts/internal/pkg/badger"
 	"bytes"
 	"context"
+	"encoding/json"
 	"io"
-	"log"
 	"log/slog"
 
+	"github.com/gin-gonic/gin"
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 	"github.com/samber/lo"
+	"go.yaml.in/yaml/v4"
 )
 
 type BucketConfig struct {
+	BucketId        string `json:"bucket_id"`
 	Endpoint        string `json:"endpoint"`
 	AccessKeyId     string `json:"access_key_id"`
 	SecretAccessKey string `json:"secret_access_key"`
@@ -31,7 +37,81 @@ type Object struct {
 	Size int64  `json:"size"`
 }
 
-func New(config BucketConfig) *MinIO {
+func AddConnection(c *gin.Context) {
+
+	// Establish database connection
+	//
+	db := badger.InitializeDatabase()
+
+	defer db.Close()
+
+	// Getting server Config
+	//
+	val, err := badger.PullKV(db, "config")
+	if err != nil {
+		slog.Error(err.Error())
+		c.JSON(400, gin.H{"error": err.Error()})
+	}
+
+	// Unmarshaling Config
+	//
+	var config configs.ServerConfig
+
+	err = yaml.Unmarshal(val, &config)
+	if err != nil {
+		slog.Error(err.Error())
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Getting User ID from JWT Token
+	//
+	userID := auth.TokenToID(c.GetHeader("Authorization"), config.OIDC.ClientSecret)
+
+	if userID == "" {
+		slog.Error("failed to get token id")
+		c.JSON(400, gin.H{"error": "failed to get token id"})
+		return
+	}
+
+	// Obtaining New Bucket Config From User
+	//
+	var bucketConfig BucketConfig
+	if err := c.ShouldBindJSON(&config); err != nil {
+		slog.Error("failed to bind json: ", err)
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Marshaling Bucket Config
+	//
+	res, err := json.Marshal(bucketConfig)
+	if err != nil {
+		slog.Error(err.Error())
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Creating Bucket Instance Connection for User
+	//
+	err = badger.PutKV(db, userID+"-"+bucketConfig.BucketId, res)
+	if err != nil {
+		slog.Error(err.Error())
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(200, gin.H{"message": "Connection Added"})
+}
+
+func Connect(c *gin.Context) (*minio.Client, error) {
+
+	var config BucketConfig
+	if err := c.ShouldBindJSON(&config); err != nil {
+		slog.Error("failed to bind json: ", err)
+		c.JSON(400, gin.H{"error": err.Error()})
+		return nil, err
+	}
 
 	endpoint := config.Endpoint
 	accessKeyID := config.AccessKeyId
@@ -44,13 +124,13 @@ func New(config BucketConfig) *MinIO {
 		Secure: useSSL,
 	})
 	if err != nil {
-		log.Fatalln(err)
+		slog.Error(err.Error())
+		c.JSON(400, gin.H{"error": err.Error()})
+		return nil, err
 	}
 
-	return &MinIO{
-		client: minioClient,
-		config: config,
-	}
+	return minioClient, nil
+
 }
 
 func (mio *MinIO) Upload(filename string, data []byte) error {

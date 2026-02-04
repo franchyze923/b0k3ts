@@ -1,8 +1,9 @@
 host: 0.0.0.0                             
 port: 8080
 oidc:                                        
-  clientId: gryphops                      
-  clientSecret: xFt5dYEAaRDF0YkwZS23mZmv5CKcjaoC                  
+  clientId: buckets
+  clientSecret: n7kqs4LjAzysP2LNpPOsNLZj6d41vOAh
+  passRedirectUrl: http://ui:4201/login?token=
   providerUrl: https://keycloak.cyberneticks.com/realms/master
   redirectUrl: http://localhost:8080/api/v1/oidc/callback
   timeout: 60                               

@@ -161,13 +161,13 @@ func (auth *Auth) Callback(c *gin.Context) {
 		return
 	}
 
-	c.Redirect(http.StatusSeeOther, auth.config.RedirectUrl+rawAccessToken)
+	c.Redirect(http.StatusSeeOther, auth.config.PassRedirectUrl+rawAccessToken)
 	return
 
 }
 
-func tokenToID(r *http.Request, OIDCConfig configs.OIDC) string {
-	authToken := r.Header.Get("Authorization")
+func TokenToID(authToken, clientSecret string) string {
+
 	authArr := strings.Split(authToken, " ")
 
 	// JWT located at index 1
@@ -182,7 +182,7 @@ func tokenToID(r *http.Request, OIDCConfig configs.OIDC) string {
 				return nil, errors.New("invalid signing algorithm")
 			}
 
-			return []byte(OIDCConfig.ClientSecret), nil
+			return []byte(clientSecret), nil
 		})
 
 	data := claims.Claims.(*JWTData)

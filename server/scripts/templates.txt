@@ -1,0 +1,8 @@
+	//miobc := mio.New(mio.BucketConfig{
+	//	Endpoint:        "",
+	//	AccessKeyId:     "",
+	//	SecretAccessKey: "",
+	//	Secure:          false,
+	//	BucketName:      "photos-and-videos",
+	//	Location:        "",
+	//})
