@@ -1,0 +1,80 @@
+<div class="page">
+  <div class="bg-grid" aria-hidden="true"></div>
+  <div class="bg-orb orb-a" aria-hidden="true"></div>
+  <div class="bg-orb orb-b" aria-hidden="true"></div>
+
+  <main class="card" role="main" aria-label="Login">
+    <header class="header">
+      <div class="mark" aria-hidden="true">
+        <span class="dot"></span>
+        <span class="ring"></span>
+      </div>
+      <div class="title">
+        <h1>Secure Access</h1>
+        <p class="subtitle">OIDC sign-in via your backend gateway</p>
+      </div>
+    </header>
+
+    <section class="content">
+      <p class="status" [attr.data-state]="state()">{{ message() }}</p>
+
+      <div class="actions">
+        <button
+          class="btn primary"
+          type="button"
+          (click)="signIn()"
+          [disabled]="state() === 'redirecting' || state() === 'processing-callback'"
+        >
+          <span class="btn-label">Sign in</span>
+          <span class="btn-glow" aria-hidden="true"></span>
+        </button>
+
+        <button
+          class="btn ghost"
+          type="button"
+          (click)="validate()"
+          [disabled]="!tokenPresent() || state() === 'redirecting' || state() === 'processing-callback'"
+        >
+          Validate session
+        </button>
+
+        <button
+          class="btn danger"
+          type="button"
+          (click)="signOut()"
+          [disabled]="!tokenPresent() || state() === 'redirecting' || state() === 'processing-callback'"
+        >
+          Sign out
+        </button>
+      </div>
+
+      <div class="meta">
+        <div class="pill">
+          <span class="k">Backend</span>
+          <code>/api/v1/oidc/login</code>
+        </div>
+        <div class="pill">
+          <span class="k">Auth check</span>
+          <code>/api/v1/oidc/authenticate</code>
+        </div>
+      </div>
+
+      <div class="hint">
+        <p>
+          Tip: the backend should redirect to
+          <code>/oidc/callback?token=…&amp;state=…</code>.
+        </p>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <span class="chip" [class.ok]="state() === 'authenticated'" [class.bad]="state() === 'error'">
+        {{ state() }}
+      </span>
+      <span class="sep" aria-hidden="true">•</span>
+      <span class="small">
+        Token storage: <code>sessionStorage</code>
+      </span>
+    </footer>
+  </main>
+</div>
