@@ -11,14 +11,20 @@
           <mat-icon matListItemIcon>folder</mat-icon>
           <span matListItemTitle>Object Manager</span>
         </a>
+
+        <!-- ... existing code ... -->
+
+        <a mat-list-item routerLink="/settings" routerLinkActive="active">
+          <mat-icon matListItemIcon>settings</mat-icon>
+          <span matListItemTitle>Settings</span>
+        </a>
       </mat-nav-list>
     </mat-sidenav>
   }
 
   <mat-sidenav-content>
     <mat-toolbar color="primary" class="topbar">
-      <span  class="page-title">{{ globalService.currentTitle | async }}</span>
-
+      <span class="page-title">{{ globalService.currentTitle | async }}</span>
 
       <span class="spacer"></span>
 
