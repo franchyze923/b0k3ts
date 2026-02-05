@@ -1,0 +1,41 @@
+.om-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+
+.chips {
+  margin-top: 8px;
+}
+
+.toolbar-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.bucket-select {
+  min-width: 260px;
+  flex: 1;
+}
+
+.upload-btn input[type='file'] {
+  display: none;
+}
+
+.table-wrap {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.key {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+  font-size: 12px;
+}
+
+.actions {
+  width: 1%;
+  white-space: nowrap;
+}

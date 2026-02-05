@@ -2,23 +2,28 @@ package app
 
 import (
 	"b0k3ts/configs"
-	"b0k3ts/internal/pkg/badger"
+	badgerDB "b0k3ts/internal/pkg/badger"
 	"log/slog"
 	"os"
 
-	badgerDB "github.com/dgraph-io/badger/v4"
+	"github.com/dgraph-io/badger/v4"
 	"go.yaml.in/yaml/v4"
 )
 
 type App struct {
 	Config   configs.ServerConfig
-	BadgerDB *badgerDB.DB
+	BadgerDB *badger.DB
 }
 
 func New() *App {
 
+	// Initialize Badger
+	//
+	db := badgerDB.InitializeDatabase()
+
 	return &App{
-		Config: configs.ServerConfig{},
+		Config:   configs.ServerConfig{},
+		BadgerDB: db,
 	}
 }
 
@@ -27,10 +32,6 @@ func (app *App) Stop() {
 }
 
 func (app *App) Preflight() {
-
-	// Initialize Badger
-	//
-	app.BadgerDB = badger.InitializeDatabase()
 
 	// Load Server Config
 	//
@@ -48,7 +49,7 @@ func (app *App) Preflight() {
 
 	// Saving Config on Badger
 	//
-	err = badger.PutKV(app.BadgerDB, "config", file)
+	err = badgerDB.PutKV(app.BadgerDB, "config", file)
 	if err != nil {
 		slog.Error(err.Error())
 		os.Exit(1)

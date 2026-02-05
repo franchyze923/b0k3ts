@@ -1,0 +1,43 @@
+.app-shell {
+  height: 100dvh;
+}
+
+.app-sidenav {
+  width: 260px;
+  border-right: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.sidenav-header {
+  padding: 16px 16px 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.brand {
+  font-weight: 700;
+  letter-spacing: 0.2px;
+}
+
+.brand-sub {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.page-title {
+  font-weight: 600;
+}
+
+.spacer {
+  flex: 1;
+}
+
+.content {
+  padding: 16px;
+}

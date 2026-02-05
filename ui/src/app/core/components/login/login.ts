@@ -1,10 +1,9 @@
-import { Component, computed, signal } from '@angular/core';
+import { Component, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import { Auth } from '../../services/auth';
 
 type UiState = 'idle' | 'redirecting' | 'processing-callback' | 'authenticated' | 'error';
-
 
 @Component({
   selector: 'app-login',
@@ -15,7 +14,7 @@ type UiState = 'idle' | 'redirecting' | 'processing-callback' | 'authenticated' 
 export class Login {
   protected readonly state = signal<UiState>('idle');
   protected readonly message = signal<string>('Sign in with your organization account.');
-  protected readonly tokenPresent = computed(() => !!this.auth.getToken());
+  protected readonly registrationUrl = signal<string | null>(null);
 
   constructor(
     private readonly auth: Auth,
@@ -30,25 +29,28 @@ export class Login {
 
   async signIn(): Promise<void> {
     this.state.set('redirecting');
-    this.message.set('Opening secure sign-in…');
-    this.auth.startLogin();
+    this.message.set('Preparing sign-in…');
+    this.registrationUrl.set(null);
+
+    try {
+      const { registrationUrl } = await this.auth.startLogin();
+      this.registrationUrl.set(registrationUrl);
+      this.state.set('idle');
+      this.message.set('Continue to registration to complete sign-in.');
+    } catch {
+      this.state.set('error');
+      this.message.set('Could not start login. Please try again.');
+    }
   }
 
-  async signOut(): Promise<void> {
-    this.auth.clearToken();
-    this.state.set('idle');
-    this.message.set('Signed out. See you soon.');
-    await this.router.navigateByUrl('/login');
-  }
-
-  async validate(): Promise<void> {
+  private async validate(): Promise<void> {
     const res = await this.auth.authenticate();
     if (res.authenticated) {
       this.state.set('authenticated');
-      this.message.set('Authenticated. Token validated by server.');
+      this.message.set('You are signed in.');
     } else {
       this.state.set('error');
-      this.message.set('Token not accepted by server. Please sign in again.');
+      this.message.set('Session not accepted. Please sign in again.');
       this.auth.clearToken();
     }
   }
@@ -70,6 +72,7 @@ export class Login {
     }
 
     this.state.set('processing-callback');
+    this.registrationUrl.set(null);
 
     if (error) {
       this.state.set('error');
@@ -78,15 +81,23 @@ export class Login {
       return;
     }
 
-    if (!this.auth.verifyCallbackState(state)) {
+    // TODO
+    // if (!this.auth.verifyCallbackState(state)) {
+    //   this.state.set('error');
+    //   this.message.set('Security check failed. Please try again.');
+    //   this.auth.clearToken();
+    //   return;
+    // }
+
+    if (!token) {
       this.state.set('error');
-      this.message.set('Security check failed (state mismatch). Please try again.');
+      this.message.set('Token not found. Please try again.');
       this.auth.clearToken();
       return;
     }
 
     this.auth.setToken(token);
-    this.message.set('Token received. Verifying with server…');
+    this.message.set('Finishing sign-in…');
 
     const res = await this.auth.authenticate(token);
     if (!res.authenticated) {
@@ -100,8 +111,6 @@ export class Login {
     await this.router.navigate([], { queryParams: {}, replaceUrl: true });
 
     this.state.set('authenticated');
-    this.message.set('Welcome back. You are signed in.');
+    this.message.set('You are signed in.');
   }
-
-
 }

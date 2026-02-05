@@ -2,9 +2,9 @@ package auth
 
 import (
 	"b0k3ts/configs"
+	badgerDB "b0k3ts/internal/pkg/badger"
 	"context"
 	"crypto/tls"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"strings"
@@ -13,14 +13,17 @@ import (
 	"log/slog"
 
 	"github.com/coreos/go-oidc"
+	"github.com/dgraph-io/badger/v4"
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt"
+	"go.yaml.in/yaml/v4"
 
 	"golang.org/x/oauth2"
 )
 
 type Auth struct {
-	config configs.OIDC
+	Config   configs.OIDC
+	BadgerDB *badger.DB
 }
 
 type JWTData struct {
@@ -39,9 +42,10 @@ type Claims struct {
 	Groups        string `json:"groups"`
 }
 
-func New(config configs.OIDC) *Auth {
+func New(config configs.OIDC, db *badger.DB) *Auth {
 	return &Auth{
-		config: config,
+		Config:   config,
+		BadgerDB: db,
 	}
 }
 
@@ -60,10 +64,10 @@ func (auth *Auth) Login(c *gin.Context) {
 		Transport: tr,
 	}
 
-	slog.Debug("%s", auth.config)
+	slog.Debug("%s", auth.Config)
 
 	ctx := oidc.ClientContext(context.Background(), client)
-	provider, err := oidc.NewProvider(ctx, auth.config.ProviderUrl)
+	provider, err := oidc.NewProvider(ctx, auth.Config.ProviderUrl)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err})
 		slog.Error(err.Error())
@@ -71,9 +75,9 @@ func (auth *Auth) Login(c *gin.Context) {
 	}
 
 	oauth2Config := oauth2.Config{
-		ClientID:     auth.config.ClientId,
-		ClientSecret: auth.config.ClientSecret,
-		RedirectURL:  auth.config.RedirectUrl,
+		ClientID:     auth.Config.ClientId,
+		ClientSecret: auth.Config.ClientSecret,
+		RedirectURL:  auth.Config.RedirectUrl,
 
 		Endpoint: provider.Endpoint(),
 
@@ -86,15 +90,8 @@ func (auth *Auth) Login(c *gin.Context) {
 		RegistrationUrl: regUrl,
 	}
 
-	jm, err := json.Marshal(OIDCRegUrl)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err})
-		slog.Error(err.Error())
-		return
-	}
-
 	c.Header("Content-Type", "text/html; charset=utf-8")
-	c.JSON(http.StatusOK, jm)
+	c.JSON(http.StatusOK, OIDCRegUrl)
 
 	slog.Info("↳ Connected ✅ ")
 	return
@@ -117,15 +114,15 @@ func (auth *Auth) Callback(c *gin.Context) {
 	}
 
 	ctx := oidc.ClientContext(context.Background(), client)
-	provider, err := oidc.NewProvider(ctx, auth.config.ProviderUrl)
+	provider, err := oidc.NewProvider(ctx, auth.Config.ProviderUrl)
 	if err != nil {
 		return
 	}
 
 	oauth2Config := oauth2.Config{
-		ClientID:     auth.config.ClientId,
-		ClientSecret: auth.config.ClientSecret,
-		RedirectURL:  auth.config.RedirectUrl,
+		ClientID:     auth.Config.ClientId,
+		ClientSecret: auth.Config.ClientSecret,
+		RedirectURL:  auth.Config.RedirectUrl,
 
 		Endpoint: provider.Endpoint(),
 
@@ -143,7 +140,7 @@ func (auth *Auth) Callback(c *gin.Context) {
 	}
 
 	oidcConfig := &oidc.Config{
-		ClientID: auth.config.ClientId,
+		ClientID: auth.Config.ClientId,
 	}
 
 	verifier := provider.Verifier(oidcConfig)
@@ -161,7 +158,7 @@ func (auth *Auth) Callback(c *gin.Context) {
 		return
 	}
 
-	c.Redirect(http.StatusSeeOther, auth.config.PassRedirectUrl+rawAccessToken)
+	c.Redirect(http.StatusSeeOther, auth.Config.PassRedirectUrl+rawAccessToken)
 	return
 
 }
@@ -192,9 +189,28 @@ func TokenToID(authToken, clientSecret string) string {
 }
 
 // validateOIDC function used to validate users logged in using OIDC
-func validateOIDC(authToken string, OIDCConfig configs.OIDC) error {
+func (auth *Auth) validateOIDC(authToken string) error {
+
+	// Getting server Config
+	//
+	val, err := badgerDB.PullKV(auth.BadgerDB, "config")
+	if err != nil {
+		slog.Error(err.Error())
+		return err
+	}
+
+	// Unmarshaling Config
+	//
+	var config configs.ServerConfig
+
+	err = yaml.Unmarshal(val, &config)
+	if err != nil {
+		slog.Error(err.Error())
+		return err
+	}
+
 	rawAccessToken := authToken
-	realmConfigURL := OIDCConfig.ProviderUrl
+	realmConfigURL := config.OIDC.ProviderUrl
 
 	tr := &http.Transport{
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
@@ -224,19 +240,20 @@ func validateOIDC(authToken string, OIDCConfig configs.OIDC) error {
 }
 
 // Authorize function used to validate user JWT token expiration status
-func Authorize(OIDCConfig configs.OIDC, w http.ResponseWriter, r *http.Request) error {
+func (auth *Auth) Authorize(c *gin.Context) {
 
 	slog.Info("Authorizing API Action")
 
 	// Extracting request data
 	//
-	authToken := r.Header.Get("Authorization")
+	authToken := c.GetHeader("Authorization")
 
-	err := validateOIDC(authToken, OIDCConfig)
+	slog.Debug("Authorization Token: %s", authToken)
+	err := auth.validateOIDC(authToken)
 	if err != nil {
-		w.WriteHeader(http.StatusUnauthorized)
-		return err
+		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		return
 	}
 
-	return nil
+	c.JSON(http.StatusOK, gin.H{"authenticated": true})
 }

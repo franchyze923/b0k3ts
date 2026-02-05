@@ -8,6 +8,11 @@ type AuthenticateResponse = {
   // user?: { id: string; email?: string; name?: string };
 };
 
+type StartLoginResponse = {
+  registrationUrl?: string;
+  registration_url?: string;
+  url?: string;
+};
 
 @Injectable({
   providedIn: 'root',
@@ -30,22 +35,40 @@ export class Auth {
   }
 
   /**
-   * Starts login by redirecting the browser to the backend OIDC login endpoint.
-   * Backend should complete OIDC and redirect to `${redirectUri}?token=...&state=...`
+   * Starts login by requesting the backend OIDC login endpoint.
+   * Backend returns JSON with a registration URL which should be displayed to the user as a link.
    */
-  startLogin(): void {
+  async startLogin(): Promise<{ registrationUrl: string }> {
     const redirectUri = new URL('/oidc/callback', window.location.origin).toString();
 
     const state = this.generateToken(32);
     sessionStorage.setItem(this.storageStateKey, state);
 
-    const loginUrl = new URL('/api/v1/oidc/login', window.location.origin);
-    loginUrl.searchParams.set('redirect_uri', redirectUri);
-    loginUrl.searchParams.set('state', state);
+    const url = `${this.apiBase}/api/v1/oidc/login`;
 
-    // Full page navigation is required for OIDC redirects
-    window.location.assign(loginUrl.toString());
+    let res: StartLoginResponse;
+    try {
+      res = await firstValueFrom(
+        this.http.get<StartLoginResponse>(url, {
+          params: {
+            redirect_uri: redirectUri,
+            state,
+          },
+        }),
+      );
+    } catch {
+      throw new Error('Login start request failed.');
+    }
+
+    const registrationUrl = res.registrationUrl ?? res.registration_url ?? res.url;
+    if (!registrationUrl) {
+      throw new Error('Backend did not provide a registration URL.');
+    }
+
+    return { registrationUrl };
   }
+
+
 
   /**
    * Accepts token from redirect callback and stores it (session-scoped by default).
@@ -81,7 +104,7 @@ export class Auth {
     if (!t) return { authenticated: false };
 
     const url = `${this.apiBase}/api/v1/oidc/authenticate`;
-    const headers = new HttpHeaders({ Authorization: `Bearer ${t}` });
+    const headers = new HttpHeaders({ Authorization: `${t}` });
 
     try {
       return await firstValueFrom(this.http.post<AuthenticateResponse>(url, {}, { headers }));

@@ -1,1 +1,98 @@
-/* You can add global styles to this file, and also import other style files */
+@use '@angular/material' as mat;
+
+/* Global theming (light/dark) via CSS variables */
+:root {
+  color-scheme: light;
+
+  --bg: #f6f7fb;
+  --surface: #ffffff;
+  --border: #e6e8f0;
+
+  --text: #111318;
+  --muted: #5b6270;
+
+  --btn-bg: #111318;
+  --btn-text: #ffffff;
+  --btn-border: #111318;
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --bg: #0b0c10;
+  --surface: #111218;
+  --border: #232531;
+
+  --text: #e8e8e8;
+  --muted: #b8bcc8;
+
+  --btn-bg: #1a1c25;
+  --btn-text: #ffffff;
+  --btn-border: #2e3140;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    color-scheme: dark;
+
+    --bg: #0b0c10;
+    --surface: #111218;
+    --border: #232531;
+
+    --text: #e8e8e8;
+    --muted: #b8bcc8;
+
+    --btn-bg: #1a1c25;
+    --btn-text: #ffffff;
+    --btn-border: #2e3140;
+  }
+}
+
+/* Material M3 themes */
+$light-theme: mat.define-theme(
+    (
+      color: (
+        theme-type: light,
+        primary: mat.$azure-palette,
+        tertiary: mat.$rose-palette,
+      ),
+      typography: (
+        brand-family: system-ui,
+        plain-family: system-ui,
+      ),
+      density: (
+        scale: 0,
+      )
+    )
+);
+
+$dark-theme: mat.define-theme(
+    (
+      color: (
+        theme-type: dark,
+        primary: mat.$azure-palette,
+        tertiary: mat.$rose-palette,
+      )
+    )
+);
+
+:root {
+  @include mat.core();
+  @include mat.all-component-themes($light-theme);
+}
+
+:root[data-theme='dark'] {
+  @include mat.all-component-colors($dark-theme);
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+}
