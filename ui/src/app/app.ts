@@ -9,6 +9,8 @@ import { MatToolbarModule } from '@angular/material/toolbar';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatListModule } from '@angular/material/list';
+import {GlobalService} from './core/services/global';
+import {AsyncPipe} from '@angular/common';
 
 @Component({
   selector: 'app-root',
@@ -21,6 +23,7 @@ import { MatListModule } from '@angular/material/list';
     MatButtonModule,
     MatIconModule,
     MatListModule,
+    AsyncPipe
   ],
   templateUrl: './app.html',
   styleUrl: './app.scss',
@@ -33,6 +36,7 @@ export class App {
     protected readonly theme: ThemeService,
     private readonly auth: Auth,
     private readonly router: Router,
+    public globalService: GlobalService
   ) {
     // Ensure the theme attribute is applied on app start
     this.theme.apply(this.theme.theme());

@@ -6,17 +6,7 @@
       {{ message() }}
     </p>
 
-    <a
-      *ngIf="registrationUrl() as url"
-      class="btn"
-      [href]="url"
-      rel="noopener noreferrer"
-    >
-      Continue to registration
-    </a>
-
     <button
-      *ngIf="!registrationUrl()"
       class="btn"
       type="button"
       (click)="signIn()"

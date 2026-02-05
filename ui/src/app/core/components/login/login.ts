@@ -1,7 +1,9 @@
-import { Component, signal } from '@angular/core';
+import {Component, ElementRef, EventEmitter, Output, signal, ViewChild} from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import { Auth } from '../../services/auth';
+import {GlobalService} from '../../services/global';
+import {AuthenticateResponse} from '../../services/auth';
 
 type UiState = 'idle' | 'redirecting' | 'processing-callback' | 'authenticated' | 'error';
 
@@ -12,6 +14,7 @@ type UiState = 'idle' | 'redirecting' | 'processing-callback' | 'authenticated' 
   styleUrl: './login.scss',
 })
 export class Login {
+
   protected readonly state = signal<UiState>('idle');
   protected readonly message = signal<string>('Sign in with your organization account.');
   protected readonly registrationUrl = signal<string | null>(null);
@@ -29,14 +32,14 @@ export class Login {
 
   async signIn(): Promise<void> {
     this.state.set('redirecting');
-    this.message.set('Preparing sign-in…');
+    this.message.set('Redirecting…');
     this.registrationUrl.set(null);
 
     try {
       const { registrationUrl } = await this.auth.startLogin();
-      this.registrationUrl.set(registrationUrl);
-      this.state.set('idle');
-      this.message.set('Continue to registration to complete sign-in.');
+
+      // Automatically go to registration (no button shown to the user)
+      window.location.assign(registrationUrl);
     } catch {
       this.state.set('error');
       this.message.set('Could not start login. Please try again.');
@@ -99,13 +102,14 @@ export class Login {
     this.auth.setToken(token);
     this.message.set('Finishing sign-in…');
 
-    const res = await this.auth.authenticate(token);
+    const res: AuthenticateResponse = await this.auth.authenticate(token);
     if (!res.authenticated) {
       this.state.set('error');
       this.message.set('Server rejected the token. Please sign in again.');
       this.auth.clearToken();
       return;
     }
+
 
     // Clean up URL (remove token from the address bar / history)
     await this.router.navigate([], { queryParams: {}, replaceUrl: true });

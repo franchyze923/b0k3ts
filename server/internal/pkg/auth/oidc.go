@@ -26,9 +26,23 @@ type Auth struct {
 	BadgerDB *badger.DB
 }
 
+type User struct {
+	ID            string   `json:"id,omitempty"`
+	Email         string   `json:"email,omitempty"`
+	Name          string   `json:"name,omitempty"`
+	PreferredName string   `json:"preferred_name,omitempty"`
+	Groups        []string `json:"groups,omitempty"`
+}
+
 type JWTData struct {
 	jwt.StandardClaims
-	CustomClaims map[string]string `json:"custom_claims"`
+	CustomClaims  map[string]string `json:"custom_claims"`
+	Email         string            `json:"email"`
+	PreferredName string            `json:"preferred_username"`
+	Name          string            `json:"name"`
+	Scope         string            `json:"scope"`
+	EmailVerified bool              `json:"email_verified"`
+	Groups        []string          `json:"groups"`
 }
 
 type OIDCRegistrationUrl struct {
@@ -36,10 +50,10 @@ type OIDCRegistrationUrl struct {
 }
 
 type Claims struct {
-	Email         string `json:"email"`
-	Name          string `json:"name"`
-	PreferredName string `json:"preferred_username"`
-	Groups        string `json:"groups"`
+	Email         string   `json:"email"`
+	Name          string   `json:"name"`
+	PreferredName string   `json:"preferred_username"`
+	Groups        []string `json:"groups"`
 }
 
 func New(config configs.OIDC, db *badger.DB) *Auth {
@@ -163,7 +177,7 @@ func (auth *Auth) Callback(c *gin.Context) {
 
 }
 
-func TokenToID(authToken, clientSecret string) string {
+func TokenToUserData(authToken, clientSecret string) User {
 
 	authArr := strings.Split(authToken, " ")
 
@@ -183,9 +197,14 @@ func TokenToID(authToken, clientSecret string) string {
 		})
 
 	data := claims.Claims.(*JWTData)
-	userID := data.CustomClaims["userid"]
 
-	return userID
+	return User{
+		ID:            data.Email,
+		Email:         data.Email,
+		Name:          data.Name,
+		PreferredName: data.PreferredName,
+		Groups:        data.Groups,
+	}
 }
 
 // validateOIDC function used to validate users logged in using OIDC
@@ -248,12 +267,12 @@ func (auth *Auth) Authorize(c *gin.Context) {
 	//
 	authToken := c.GetHeader("Authorization")
 
-	slog.Debug("Authorization Token: %s", authToken)
 	err := auth.validateOIDC(authToken)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
 		return
 	}
+	userInfo := TokenToUserData(authToken, auth.Config.ClientSecret)
 
-	c.JSON(http.StatusOK, gin.H{"authenticated": true})
+	c.JSON(http.StatusOK, gin.H{"authenticated": true, "user_info": userInfo})
 }

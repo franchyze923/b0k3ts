@@ -1,9 +1,10 @@
-import { Injectable } from '@angular/core';
+import {Injectable, ViewChild, ElementRef} from '@angular/core';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 
-type AuthenticateResponse = {
+export type AuthenticateResponse = {
   authenticated: boolean;
+  user_info: User | null
   // You can extend this with user/profile fields if your backend returns them.
   // user?: { id: string; email?: string; name?: string };
 };
@@ -18,6 +19,7 @@ type StartLoginResponse = {
   providedIn: 'root',
 })
 export class Auth {
+
   private readonly apiBase = ''; // keep '' for same-origin; set e.g. 'https://api.example.com' if needed
 
   private readonly storageTokenKey = 'oidc.token';
@@ -101,7 +103,7 @@ export class Auth {
    */
   async authenticate(token?: string): Promise<AuthenticateResponse> {
     const t = token ?? this.getToken();
-    if (!t) return { authenticated: false };
+    if (!t) return { authenticated: false, user_info: null };
 
     const url = `${this.apiBase}/api/v1/oidc/authenticate`;
     const headers = new HttpHeaders({ Authorization: `${t}` });
@@ -109,8 +111,11 @@ export class Auth {
     try {
       return await firstValueFrom(this.http.post<AuthenticateResponse>(url, {}, { headers }));
     } catch {
-      return { authenticated: false };
+      return { authenticated: false, user_info: null };
     }
+
+
+
   }
 
   private base64UrlEncode(bytes: Uint8Array): string {
@@ -121,3 +126,11 @@ export class Auth {
     return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
   }
 }
+
+export type User = {
+  id: string;
+  email: string;
+  name: string;
+  preferred_username: string
+  groups: string[];
+};

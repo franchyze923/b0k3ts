@@ -17,7 +17,9 @@
 
   <mat-sidenav-content>
     <mat-toolbar color="primary" class="topbar">
-      <span class="page-title">Console</span>
+      <span  class="page-title">{{ globalService.currentTitle | async }}</span>
+
+
       <span class="spacer"></span>
 
       <button mat-button type="button" (click)="toggleTheme()">
