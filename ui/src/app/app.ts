@@ -9,8 +9,8 @@ import { MatToolbarModule } from '@angular/material/toolbar';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatListModule } from '@angular/material/list';
-import {GlobalService} from './core/services/global';
-import {AsyncPipe} from '@angular/common';
+import { GlobalService } from './core/services/global';
+import { AsyncPipe } from '@angular/common';
 
 @Component({
   selector: 'app-root',
@@ -23,7 +23,7 @@ import {AsyncPipe} from '@angular/common';
     MatButtonModule,
     MatIconModule,
     MatListModule,
-    AsyncPipe
+    AsyncPipe,
   ],
   templateUrl: './app.html',
   styleUrl: './app.scss',
@@ -32,11 +32,13 @@ export class App {
   protected readonly title = signal('b0k3ts');
   protected readonly authenticated = signal<boolean>(false);
 
+  protected readonly currentUrl = signal<string>('');
+
   constructor(
     protected readonly theme: ThemeService,
     private readonly auth: Auth,
     private readonly router: Router,
-    public globalService: GlobalService
+    public globalService: GlobalService,
   ) {
     // Ensure the theme attribute is applied on app start
     this.theme.apply(this.theme.theme());
@@ -44,15 +46,24 @@ export class App {
     // Initial auth check + re-check after each navigation (e.g. after OIDC callback cleans URL)
     void this.refreshAuth();
 
+    // Track current URL (for sidenav subsections)
+    this.currentUrl.set(this.router.url);
+
     this.router.events
       .pipe(filter((e): e is NavigationEnd => e instanceof NavigationEnd))
       .subscribe(() => {
+        this.currentUrl.set(this.router.url);
         void this.refreshAuth();
       });
   }
 
   toggleTheme(): void {
     this.theme.toggle();
+  }
+
+  protected isSettingsSectionOpen(): boolean {
+    const url = this.currentUrl();
+    return url === '/settings' || url.startsWith('/settings/');
   }
 
   private async refreshAuth(): Promise<void> {
@@ -62,7 +73,7 @@ export class App {
       return;
     }
 
-    const res = await this.auth.authenticate(token);
+    const res = await this.auth.authenticateAny(token);
     if (res.authenticated) {
       this.authenticated.set(true);
       return;

@@ -1,18 +1,19 @@
 package configs
 
 type ServerConfig struct {
-	Host string `json:"host,omitempty"`
-	Port string `json:"port,omitempty"`
-	OIDC OIDC   `json:"oidc"`
+	Host      string `yaml:"host,omitempty"`
+	Port      string `yaml:"port,omitempty"`
+	JWTSecret string `yaml:"jwtSecret,omitempty"`
+	//OIDC OIDC   `json:"oidc"`
 }
 
 type OIDC struct {
-	ClientId        string `yaml:"clientId,omitempty"`
-	ClientSecret    string `yaml:"clientSecret,omitempty"`
-	FailRedirectUrl string `yaml:"failRedirectUrl,omitempty"`
-	PassRedirectUrl string `yaml:"passRedirectUrl,omitempty"`
-	ProviderUrl     string `yaml:"providerUrl,omitempty"`
-	Timeout         uint32 `yaml:"timeout,omitempty"`
-	JWTSecret       string `yaml:"jwtSecret,omitempty"`
-	RedirectUrl     string `yaml:"redirectUrl,omitempty"`
+	ClientId        string `json:"clientId,omitempty"`
+	ClientSecret    string `json:"clientSecret,omitempty"`
+	FailRedirectUrl string `json:"failRedirectUrl,omitempty"`
+	PassRedirectUrl string `json:"passRedirectUrl,omitempty"`
+	ProviderUrl     string `json:"providerUrl,omitempty"`
+	Timeout         uint32 `json:"timeout,omitempty"`
+	JWTSecret       string `json:"jwtSecret,omitempty"`
+	RedirectUrl     string `json:"redirectUrl,omitempty"`
 }

@@ -18,6 +18,20 @@
           <mat-icon matListItemIcon>settings</mat-icon>
           <span matListItemTitle>Settings</span>
         </a>
+
+        @if (isSettingsSectionOpen()) {
+          <div class="sidenav-subsection">
+            <a mat-list-item routerLink="/settings/buckets" routerLinkActive="active">
+              <mat-icon matListItemIcon>storage</mat-icon>
+              <span matListItemTitle>Bucket Connections</span>
+            </a>
+
+            <a mat-list-item routerLink="/settings/oidc" routerLinkActive="active">
+              <mat-icon matListItemIcon>vpn_key</mat-icon>
+              <span matListItemTitle>OIDC</span>
+            </a>
+          </div>
+        }
       </mat-nav-list>
     </mat-sidenav>
   }

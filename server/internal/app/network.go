@@ -1,11 +1,14 @@
 package app
 
 import (
+	"b0k3ts/configs"
 	"b0k3ts/internal/pkg/auth"
+	badgerDB "b0k3ts/internal/pkg/badger"
 	"b0k3ts/internal/pkg/buckets"
 	"log/slog"
 
 	"github.com/gin-gonic/gin"
+	"go.yaml.in/yaml/v4"
 )
 
 func (app *App) Serve() {
@@ -13,7 +16,30 @@ func (app *App) Serve() {
 	// Create a Gin router
 	r := gin.Default()
 
-	oAuth := auth.New(app.Config.OIDC, app.BadgerDB)
+	res, err := badgerDB.PullKV(app.BadgerDB, "oidc-config")
+	if err != nil {
+		if err.Error() == "Key not found" {
+			slog.Info("OIDC Not Configured")
+		} else {
+			slog.Error(err.Error())
+			return
+		}
+		//return
+	}
+
+	// Unmarshaling Config
+	//
+	var oic configs.OIDC
+
+	err = yaml.Unmarshal(res, &oic)
+	if err != nil {
+		slog.Error(err.Error())
+		return
+	}
+
+	slog.Debug("Config", app.Config)
+
+	oAuth := auth.New(app.Config, oic, app.BadgerDB)
 	bucket := buckets.NewConfig(app.BadgerDB)
 
 	v1 := r.Group("/api/v1")
@@ -25,6 +51,17 @@ func (app *App) Serve() {
 			oidc.GET("/login", oAuth.Login)
 			oidc.GET("/callback", oAuth.Callback)
 			oidc.POST("/authenticate", oAuth.Authorize)
+			oidc.GET("/config", oAuth.GetConfig)
+			oidc.POST("/configure", oAuth.Configure)
+		}
+
+		local := v1.Group("/local")
+		{
+			local.POST("/login", oAuth.LocalLogin)
+
+			local.POST("/login_redirect", oAuth.LocalLoginRedirect)
+
+			local.POST("/authenticate", oAuth.LocalAuthorize)
 		}
 
 		bkt := v1.Group("/buckets")
@@ -48,7 +85,7 @@ func (app *App) Serve() {
 
 	// Run the server
 	//
-	err := r.Run(app.Config.Host + ":" + app.Config.Port)
+	err = r.Run(app.Config.Host + ":" + app.Config.Port)
 	if err != nil {
 		slog.Error("failed to run gin router: ", err)
 		return

@@ -6,6 +6,45 @@
       {{ message() }}
     </p>
 
+    <!-- Local login -->
+    <div style="display: grid; gap: 10px; margin: 12px 0 14px;">
+      <label style="display: grid; gap: 6px; font-size: 14px;">
+        Username
+        <input
+          type="text"
+          autocomplete="username"
+          [value]="localUsername()"
+          (input)="localUsername.set(($any($event.target)).value)"
+          [disabled]="state() === 'redirecting' || state() === 'processing-callback'"
+        />
+      </label>
+
+      <label style="display: grid; gap: 6px; font-size: 14px;">
+        Password
+        <input
+          type="password"
+          autocomplete="current-password"
+          [value]="localPassword()"
+          (input)="localPassword.set(($any($event.target)).value)"
+          [disabled]="state() === 'redirecting' || state() === 'processing-callback'"
+        />
+      </label>
+
+      <button
+        class="btn"
+        type="button"
+        (click)="signInLocal()"
+        [disabled]="
+          state() === 'redirecting' ||
+          state() === 'processing-callback' ||
+          !localUsername().trim() ||
+          !localPassword()
+        "
+      >
+        Login Local
+      </button>
+    </div>
+
     <button
       class="btn"
       type="button"

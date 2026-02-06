@@ -277,10 +277,6 @@ export class ObjectManager {
 
     const blob = await this.storage.downloadObject({ bucket, filename: obj.key });
 
-    // const blob = new Blob([decodedString], {
-    //   type: obj.contentType || 'application/octet-stream',
-    // });
-
     const url = URL.createObjectURL(blob);
     try {
       const a = document.createElement('a');

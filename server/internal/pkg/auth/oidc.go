@@ -5,8 +5,10 @@ import (
 	badgerDB "b0k3ts/internal/pkg/badger"
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"errors"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -16,14 +18,14 @@ import (
 	"github.com/dgraph-io/badger/v4"
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt"
-	"go.yaml.in/yaml/v4"
 
 	"golang.org/x/oauth2"
 )
 
 type Auth struct {
-	Config   configs.OIDC
-	BadgerDB *badger.DB
+	ServerConfig configs.ServerConfig
+	OIDCConfig   configs.OIDC
+	BadgerDB     *badger.DB
 }
 
 type User struct {
@@ -56,11 +58,53 @@ type Claims struct {
 	Groups        []string `json:"groups"`
 }
 
-func New(config configs.OIDC, db *badger.DB) *Auth {
+func New(config configs.ServerConfig, oidcConfig configs.OIDC, db *badger.DB) *Auth {
 	return &Auth{
-		Config:   config,
-		BadgerDB: db,
+		ServerConfig: config,
+		OIDCConfig:   oidcConfig,
+		BadgerDB:     db,
 	}
+}
+
+func (auth *Auth) GetConfig(c *gin.Context) {
+
+	ret, err := badgerDB.PullKV(auth.BadgerDB, "oidc-config")
+	if err != nil {
+		slog.Error(err.Error())
+		c.JSON(500, gin.H{"error": err.Error()})
+		os.Exit(1)
+	}
+
+	c.Data(200, "application/json", ret)
+
+}
+
+func (auth *Auth) Configure(c *gin.Context) {
+
+	var req configs.OIDC
+	if err := c.ShouldBindJSON(&req); err != nil {
+		slog.Error("failed to bind json: ", err)
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+
+	ret, err := json.Marshal(req)
+	if err != nil {
+		slog.Error("failed to marshal json: ", err)
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Saving Config on Badger
+	//
+	err = badgerDB.PutKV(auth.BadgerDB, "oidc-config", ret)
+	if err != nil {
+		slog.Error(err.Error())
+		os.Exit(1)
+	}
+
+	c.JSON(200, gin.H{"message": "oidc config saved successfully"})
+
 }
 
 func (auth *Auth) Login(c *gin.Context) {
@@ -78,10 +122,10 @@ func (auth *Auth) Login(c *gin.Context) {
 		Transport: tr,
 	}
 
-	slog.Debug("%s", auth.Config)
+	slog.Debug("%s", auth.OIDCConfig)
 
 	ctx := oidc.ClientContext(context.Background(), client)
-	provider, err := oidc.NewProvider(ctx, auth.Config.ProviderUrl)
+	provider, err := oidc.NewProvider(ctx, auth.OIDCConfig.ProviderUrl)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err})
 		slog.Error(err.Error())
@@ -89,9 +133,9 @@ func (auth *Auth) Login(c *gin.Context) {
 	}
 
 	oauth2Config := oauth2.Config{
-		ClientID:     auth.Config.ClientId,
-		ClientSecret: auth.Config.ClientSecret,
-		RedirectURL:  auth.Config.RedirectUrl,
+		ClientID:     auth.OIDCConfig.ClientId,
+		ClientSecret: auth.OIDCConfig.ClientSecret,
+		RedirectURL:  auth.OIDCConfig.RedirectUrl,
 
 		Endpoint: provider.Endpoint(),
 
@@ -128,15 +172,15 @@ func (auth *Auth) Callback(c *gin.Context) {
 	}
 
 	ctx := oidc.ClientContext(context.Background(), client)
-	provider, err := oidc.NewProvider(ctx, auth.Config.ProviderUrl)
+	provider, err := oidc.NewProvider(ctx, auth.OIDCConfig.ProviderUrl)
 	if err != nil {
 		return
 	}
 
 	oauth2Config := oauth2.Config{
-		ClientID:     auth.Config.ClientId,
-		ClientSecret: auth.Config.ClientSecret,
-		RedirectURL:  auth.Config.RedirectUrl,
+		ClientID:     auth.OIDCConfig.ClientId,
+		ClientSecret: auth.OIDCConfig.ClientSecret,
+		RedirectURL:  auth.OIDCConfig.RedirectUrl,
 
 		Endpoint: provider.Endpoint(),
 
@@ -154,7 +198,7 @@ func (auth *Auth) Callback(c *gin.Context) {
 	}
 
 	oidcConfig := &oidc.Config{
-		ClientID: auth.Config.ClientId,
+		ClientID: auth.OIDCConfig.ClientId,
 	}
 
 	verifier := provider.Verifier(oidcConfig)
@@ -172,64 +216,118 @@ func (auth *Auth) Callback(c *gin.Context) {
 		return
 	}
 
-	c.Redirect(http.StatusSeeOther, auth.Config.PassRedirectUrl+rawAccessToken)
+	c.Redirect(http.StatusSeeOther, auth.OIDCConfig.PassRedirectUrl+rawAccessToken)
 	return
 
 }
 
-func TokenToUserData(authToken, clientSecret string) User {
+// TokenToUserData extracts user info from either:
+// - OIDC JWTs (id/access tokens with claims like email, preferred_username, name, groups)
+// - Local JWTs (your HS256 tokens with claims like username/email)
+//
+// IMPORTANT: This function does NOT verify the signature.
+// Use it only after you've already verified the token (OIDC: validateOIDC, Local: LocalAuthorize),
+// or if you're okay with "best-effort display" and not authorization decisions.
+func TokenToUserData(authToken string) (User, error) {
 
-	authArr := strings.Split(authToken, " ")
+	raw := strings.TrimSpace(authToken)
 
-	// JWT located at index 1
-	//
-	jwtToken := authArr[0]
+	// Accept "Bearer <token>" or raw token
+	if parts := strings.SplitN(raw, " ", 2); len(parts) == 2 && strings.EqualFold(parts[0], "Bearer") {
+		raw = strings.TrimSpace(parts[1])
+	}
+	if raw == "" {
+		return User{}, errors.New("empty token")
+	}
 
-	// We do not need to check for errors since we are already authorized
-	//
-	claims, _ := jwt.ParseWithClaims(jwtToken, &JWTData{},
-		func(token *jwt.Token) (interface{}, error) {
-			if jwt.SigningMethodHS256 != token.Method {
-				return nil, errors.New("invalid signing algorithm")
+	// Parse claims without verifying signature (we assume verification happened earlier).
+	parser := new(jwt.Parser)
+	claims := jwt.MapClaims{}
+	_, _, err := parser.ParseUnverified(raw, claims)
+	if err != nil {
+		return User{}, err
+	}
+
+	getString := func(key string) string {
+		if v, ok := claims[key]; ok {
+			if s, ok := v.(string); ok {
+				return s
 			}
+		}
+		return ""
+	}
 
-			return []byte(clientSecret), nil
-		})
+	// Local tokens (your code): username/email
+	localUsername := getString("username")
+	localEmail := getString("email")
 
-	data := claims.Claims.(*JWTData)
+	// OIDC tokens: preferred_username/email/name
+	oidcPreferred := getString("preferred_username")
+	oidcEmail := getString("email")
+	oidcName := getString("name")
+
+	// Choose best available fields
+	email := firstNonEmpty(localEmail, oidcEmail)
+	preferred := firstNonEmpty(oidcPreferred, localUsername)
+	name := firstNonEmpty(oidcName, preferred, email)
+
+	groups := extractStringSlice(claims["groups"])
+
+	// ID: prefer email, else preferred/username
+	id := firstNonEmpty(email, preferred, localUsername, getString("sub"))
 
 	return User{
-		ID:            data.Email,
-		Email:         data.Email,
-		Name:          data.Name,
-		PreferredName: data.PreferredName,
-		Groups:        data.Groups,
+		ID:            id,
+		Email:         email,
+		Name:          name,
+		PreferredName: preferred,
+		Groups:        groups,
+	}, nil
+}
+
+func firstNonEmpty(vals ...string) string {
+	for _, v := range vals {
+		if strings.TrimSpace(v) != "" {
+			return v
+		}
 	}
+	return ""
+}
+
+func extractStringSlice(v interface{}) []string {
+	if v == nil {
+		return nil
+	}
+
+	// Common JWT decode type: []interface{}
+	if arr, ok := v.([]interface{}); ok {
+		out := make([]string, 0, len(arr))
+		for _, item := range arr {
+			if s, ok := item.(string); ok && s != "" {
+				out = append(out, s)
+			}
+		}
+		return out
+	}
+
+	// Sometimes it's already []string
+	if arr, ok := v.([]string); ok {
+		return arr
+	}
+
+	// Sometimes it's a single string
+	if s, ok := v.(string); ok && s != "" {
+		return []string{s}
+	}
+
+	return nil
 }
 
 // validateOIDC function used to validate users logged in using OIDC
 func (auth *Auth) validateOIDC(authToken string) error {
 
-	// Getting server Config
-	//
-	val, err := badgerDB.PullKV(auth.BadgerDB, "config")
-	if err != nil {
-		slog.Error(err.Error())
-		return err
-	}
-
-	// Unmarshaling Config
-	//
-	var config configs.ServerConfig
-
-	err = yaml.Unmarshal(val, &config)
-	if err != nil {
-		slog.Error(err.Error())
-		return err
-	}
-
 	rawAccessToken := authToken
-	realmConfigURL := config.OIDC.ProviderUrl
+	realmConfigURL := auth.OIDCConfig.ProviderUrl
 
 	tr := &http.Transport{
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
@@ -272,7 +370,6 @@ func (auth *Auth) Authorize(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
 		return
 	}
-	userInfo := TokenToUserData(authToken, auth.Config.ClientSecret)
-
+	userInfo, _ := TokenToUserData(authToken)
 	c.JSON(http.StatusOK, gin.H{"authenticated": true, "user_info": userInfo})
 }

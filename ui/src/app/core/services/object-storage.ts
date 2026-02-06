@@ -27,7 +27,7 @@ export class ObjectStorageService {
    *
    * Note: Do NOT set the Content-Type header manually for FormData; the browser will set it with a boundary.
    */
-  async uploadObject(params: { bucket: string; key: string; bytes: number[]; contentType?: string }): Promise<void> {
+  async uploadObject(params: { bucket: string; key: string; bytes: number[] ; contentType?: string }): Promise<void> {
     const url = `${this.apiBase}/api/v1/objects/upload`;
 
     const fileName = params.key.split('/').filter(Boolean).pop() ?? params.key;
@@ -74,14 +74,18 @@ export class ObjectStorageService {
     const destinationKey = `${normalizedPrefix}${fileName}`;
 
     // download -> upload -> delete (uses only the allowed APIs)
-    // const bytesBuffer = await this.downloadObject({ bucket: params.bucket, filename: params.sourceKey });
-    // const bytes = Array.from(new Uint8Array(bytesBuffer));
-    //
-    // await this.uploadObject({
-    //   bucket: params.bucket,
-    //   key: destinationKey,
-    //   bytes,
-    // });
+    const blob = await this.downloadObject({ bucket: params.bucket, filename: params.sourceKey });
+
+    const blobBytes = await blob.arrayBuffer();
+    const bytes: number[] = Array.from(new Uint8Array(blobBytes));
+
+
+
+    await this.uploadObject({
+      bucket: params.bucket,
+      key: destinationKey,
+      bytes,
+    });
 
     await this.deleteObject({
       bucket: params.bucket,

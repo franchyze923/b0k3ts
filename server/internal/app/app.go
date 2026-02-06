@@ -2,6 +2,7 @@ package app
 
 import (
 	"b0k3ts/configs"
+	"b0k3ts/internal/pkg/auth"
 	badgerDB "b0k3ts/internal/pkg/badger"
 	"log/slog"
 	"os"
@@ -32,6 +33,19 @@ func (app *App) Stop() {
 }
 
 func (app *App) Preflight() {
+
+	// Create default user
+	store := auth.NewStore(app.BadgerDB)
+
+	created, err := store.EnsureUser("dsos", "dsos")
+	if err != nil {
+		slog.Error(err.Error())
+		return
+	}
+
+	if !created {
+		slog.Error("skipping default user creation, user already exists")
+	}
 
 	// Load Server Config
 	//

@@ -41,3 +41,9 @@
 .content {
   padding: 16px;
 }
+
+.sidenav-subsection {
+  padding-left: 18px;
+  border-left: 2px solid color-mix(in srgb, var(--border) 70%, transparent);
+  margin-left: 14px;
+}

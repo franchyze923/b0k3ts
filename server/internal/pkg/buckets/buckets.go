@@ -16,7 +16,6 @@ import (
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 	"github.com/samber/lo"
-	"go.yaml.in/yaml/v4"
 )
 
 type BucketConfig struct {
@@ -60,7 +59,8 @@ type Buckets struct {
 }
 
 type App struct {
-	DB *badger.DB
+	DB         *badger.DB
+	OIDCConfig *configs.OIDC
 }
 
 type Object struct {
@@ -119,28 +119,9 @@ func scanByPrefix(db *badger.DB, prefixStr string) [][]byte {
 
 func (app *App) DeleteConnection(c *gin.Context) {
 
-	// Getting server Config
-	//
-	val, err := badgerDB.PullKV(app.DB, "config")
-	if err != nil {
-		slog.Error(err.Error())
-		c.JSON(400, gin.H{"error": err.Error()})
-	}
-
-	// Unmarshalling Config
-	//
-	var config configs.ServerConfig
-
-	err = yaml.Unmarshal(val, &config)
-	if err != nil {
-		slog.Error(err.Error())
-		c.JSON(400, gin.H{"error": err.Error()})
-		return
-	}
-
 	// Getting User ID from JWT Token
 	//
-	userInfo := auth.TokenToUserData(c.GetHeader("Authorization"), config.OIDC.ClientSecret)
+	userInfo := auth.TokenToUserData(c.GetHeader("Authorization"), app.OIDCConfig.ClientSecret)
 
 	if userInfo.Email == "" {
 		slog.Error("failed to get token id")
@@ -208,28 +189,9 @@ func (app *App) DeleteConnection(c *gin.Context) {
 
 func (app *App) ListConnection(c *gin.Context) {
 
-	// Getting server Config
-	//
-	val, err := badgerDB.PullKV(app.DB, "config")
-	if err != nil {
-		slog.Error(err.Error())
-		c.JSON(400, gin.H{"error": err.Error()})
-	}
-
-	// Unmarshalling Config
-	//
-	var config configs.ServerConfig
-
-	err = yaml.Unmarshal(val, &config)
-	if err != nil {
-		slog.Error(err.Error())
-		c.JSON(400, gin.H{"error": err.Error()})
-		return
-	}
-
 	// Getting User ID from JWT Token
 	//
-	userInfo := auth.TokenToUserData(c.GetHeader("Authorization"), config.OIDC.ClientSecret)
+	userInfo := auth.TokenToUserData(c.GetHeader("Authorization"), app.OIDCConfig.ClientSecret)
 
 	if userInfo.Email == "" {
 		slog.Error("failed to get token id")
@@ -241,10 +203,10 @@ func (app *App) ListConnection(c *gin.Context) {
 
 	var bucketConfigs []BucketConfig
 
-	res := scanByPrefix(app.DB, "bucket-")
+	resP := scanByPrefix(app.DB, "bucket-")
 
-	for _, val := range res {
-		err = json.Unmarshal(val, &bucketConfig)
+	for _, val := range resP {
+		err := json.Unmarshal(val, &bucketConfig)
 		if err != nil {
 			slog.Error(err.Error())
 			c.JSON(400, gin.H{"error": err.Error()})
@@ -281,28 +243,9 @@ func (app *App) ListConnection(c *gin.Context) {
 
 func (app *App) AddConnection(c *gin.Context) {
 
-	// Getting server Config
-	//
-	val, err := badgerDB.PullKV(app.DB, "config")
-	if err != nil {
-		slog.Error(err.Error())
-		c.JSON(400, gin.H{"error": err.Error()})
-	}
-
-	// Unmarshalling Config
-	//
-	var config configs.ServerConfig
-
-	err = yaml.Unmarshal(val, &config)
-	if err != nil {
-		slog.Error(err.Error())
-		c.JSON(400, gin.H{"error": err.Error()})
-		return
-	}
-
 	// Getting User ID from JWT Token
 	//
-	userInfo := auth.TokenToUserData(c.GetHeader("Authorization"), config.OIDC.ClientSecret)
+	userInfo := auth.TokenToUserData(c.GetHeader("Authorization"), app.OIDCConfig.ClientSecret)
 
 	if userInfo.Email == "" {
 		slog.Error("failed to get token id")
@@ -562,28 +505,10 @@ func (app *App) ListObjects(c *gin.Context) {
 }
 
 func authorizeAndExtract(app App, c *gin.Context, bucketName string) *BucketConfig {
-	// Getting server Config
-	//
-	val, err := badgerDB.PullKV(app.DB, "config")
-	if err != nil {
-		slog.Error(err.Error())
-		c.JSON(400, gin.H{"error": err.Error()})
-	}
-
-	// Unmarshalling Config
-	//
-	var config configs.ServerConfig
-
-	err = yaml.Unmarshal(val, &config)
-	if err != nil {
-		slog.Error(err.Error())
-		c.JSON(400, gin.H{"error": err.Error()})
-		return nil
-	}
 
 	// Getting User ID from JWT Token
 	//
-	userInfo := auth.TokenToUserData(c.GetHeader("Authorization"), config.OIDC.ClientSecret)
+	userInfo := auth.TokenToUserData(c.GetHeader("Authorization"), app.OIDCConfig.ClientSecret)
 
 	if userInfo.Email == "" {
 		slog.Error("failed to get token id")
