@@ -20,20 +20,30 @@ export class ObjectStorageService {
   }
 
   /**
-   * Uploads an object by sending:
-   * - name (we use `key` as the "name" to preserve paths like `reports/2026.pdf`)
-   * - bytes (number[] from Uint8Array)
+   * Uploads an object using multipart/form-data:
+   * - bucket: string
+   * - name: string (we use `key` as the "name" to preserve paths like `reports/2026.pdf`)
+   * - file: Blob (built from the provided bytes)
+   *
+   * Note: Do NOT set the Content-Type header manually for FormData; the browser will set it with a boundary.
    */
   async uploadObject(params: { bucket: string; key: string; bytes: number[]; contentType?: string }): Promise<void> {
     const url = `${this.apiBase}/api/v1/objects/upload`;
-    await firstValueFrom(
-      this.http.post<void>(url, {
-        bucket: params.bucket,
-        name: params.key,
-        bytes: params.bytes,
-        content_type: params.contentType,
-      }),
-    );
+
+    const fileName = params.key.split('/').filter(Boolean).pop() ?? params.key;
+    const blob = new Blob([new Uint8Array(params.bytes)], {
+      type: params.contentType ?? 'application/octet-stream',
+    });
+
+    const form = new FormData();
+    form.append('bucket', params.bucket);
+    form.append('name', params.key);
+    form.append('file', blob, fileName);
+
+    // If your backend expects an explicit field for content type, keep this:
+    if (params.contentType) form.append('content_type', params.contentType);
+
+    await firstValueFrom(this.http.post<void>(url, form));
   }
 
   /**

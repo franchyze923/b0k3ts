@@ -19,6 +19,7 @@ import { ObjectStorageService } from '../../services/object-storage';
 import { MovePrefixDialog, MovePrefixDialogResult } from '../move-prefix-dialog/move-prefix-dialog';
 import { GlobalService } from '../../services/global';
 import { BucketConfigsService } from '../../services/bucket-configs';
+import {MatInputModule} from '@angular/material/input';
 
 type BucketObject = {
   key: string;
@@ -63,6 +64,7 @@ type FlatNode = {
     MatChipsModule,
     MatDialogModule,
     MatTreeModule,
+    MatInputModule
   ],
   templateUrl: './object-manager.html',
   styleUrl: './object-manager.scss',
@@ -91,6 +93,14 @@ export class ObjectManager {
   readonly objects = signal<BucketObject[]>([]);
 
   readonly objectCount = computed(() => this.objects().length);
+
+  readonly uploadPrefix = signal<string>(''); // e.g. "reports/2026/"
+
+  private normalizePrefix(prefix: string): string {
+    const trimmed = prefix.trim();
+    if (!trimmed) return '';
+    return trimmed.replace(/^\/+/, '').replace(/\/+$/, '') + '/';
+  }
 
   // ---- Tree setup (Flat tree) ----
   private readonly treeFlattener = new MatTreeFlattener<TreeNode, FlatNode>(
@@ -230,13 +240,15 @@ export class ObjectManager {
     const bucket = this.selectedBucket();
     if (!bucket) return;
 
+    const prefix = this.normalizePrefix(this.uploadPrefix());
+
     for (const file of Array.from(files)) {
       const buffer = await file.arrayBuffer();
       const bytes = Array.from(new Uint8Array(buffer));
 
       await this.storage.uploadObject({
         bucket,
-        key: file.name,
+        key: `${prefix}${file.name}`,
         bytes,
         contentType: file.type || undefined,
       });

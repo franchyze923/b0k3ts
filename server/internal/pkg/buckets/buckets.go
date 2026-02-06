@@ -39,13 +39,6 @@ type ObjectRequest struct {
 	BucketId string `json:"bucket"`
 }
 
-type ObjectUploadRequest struct {
-	Bucket      string `json:"bucket"`
-	Name        string `json:"name"`
-	Bytes       []byte `json:"bytes"`
-	ContentType string `json:"content_type"`
-}
-
 type Buckets struct {
 	Client   *minio.Client
 	Config   BucketConfig
@@ -356,7 +349,11 @@ func Connect(config BucketConfig) (*minio.Client, error) {
 
 func (app *App) Upload(c *gin.Context) {
 
-	bucketConfig := authorizeAndExtract(*app, c)
+	bucketName := c.PostForm("bucket")
+
+	fileName := c.PostForm("name") // This will allow us to insert in folders
+
+	bucketConfig := authorizeAndExtract(*app, c, bucketName)
 	if bucketConfig == nil {
 		return
 	}
@@ -370,18 +367,27 @@ func (app *App) Upload(c *gin.Context) {
 
 	ctx := context.Background()
 
-	slog.Info("Successfully created %s", bucketConfig.BucketName)
-
-	// Upload File
-	//
-	var file ObjectUploadRequest
-	if err := c.ShouldBindJSON(&file); err != nil {
-		slog.Error("failed to bind json: ", err)
+	// 2. Retrieve the file
+	fh, err := c.FormFile("file")
+	if err != nil {
+		slog.Error(err.Error())
 		c.JSON(400, gin.H{"error": err.Error()})
 		return
 	}
 
-	info, err := mio.PutObject(ctx, bucketConfig.BucketName, file.Name, bytes.NewReader(file.Bytes), int64(len(file.Bytes)),
+	file, err := fh.Open()
+	if err != nil {
+		slog.Error(err.Error())
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+	defer file.Close()
+
+	slog.Info("Successfully opened %s", fh.Filename)
+
+	buff := make([]byte, fh.Size)
+
+	info, err := mio.PutObject(ctx, bucketConfig.BucketName, fileName, bytes.NewReader(buff), int64(fh.Size),
 		minio.PutObjectOptions{ContentType: "application/octet-stream"})
 	if err != nil {
 		slog.Error(err.Error())
@@ -389,7 +395,7 @@ func (app *App) Upload(c *gin.Context) {
 		return
 	}
 
-	slog.Info("Successfully uploaded %s of size %d", file.Name, info.Size)
+	slog.Info("Successfully uploaded %s of size %d", fh.Filename, info.Size)
 
 	c.JSON(200, gin.H{"message": "File uploaded successfully"})
 	return
@@ -448,7 +454,7 @@ func (mio *Buckets) ListBuckets() ([]string, error) {
 
 func (app *App) ListObjects(c *gin.Context) {
 
-	bucketConfig := authorizeAndExtract(*app, c)
+	bucketConfig := authorizeAndExtract(*app, c, "")
 	if bucketConfig == nil {
 		return
 	}
@@ -487,7 +493,7 @@ func (app *App) ListObjects(c *gin.Context) {
 	c.JSON(200, objects)
 }
 
-func authorizeAndExtract(app App, c *gin.Context) *BucketConfig {
+func authorizeAndExtract(app App, c *gin.Context, bucketName string) *BucketConfig {
 	// Getting server Config
 	//
 	val, err := badgerDB.PullKV(app.DB, "config")
@@ -517,31 +523,48 @@ func authorizeAndExtract(app App, c *gin.Context) *BucketConfig {
 		return nil
 	}
 
-	// Obtaining New Bucket Config From User
-	//
-	var req ObjectRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		slog.Error("failed to bind json: ", err)
-		c.JSON(400, gin.H{"error": err.Error()})
-		return nil
-	}
-
-	// Creating Bucket Instance Connection for User
-	//
-	res, err := badgerDB.PullKV(app.DB, "bucket-"+req.BucketId)
-	if err != nil {
-		slog.Error(err.Error())
-		c.JSON(400, gin.H{"error": err.Error()})
-		return nil
-	}
-
 	var bucketConfig BucketConfig
 
-	err = json.Unmarshal(res, &bucketConfig)
-	if err != nil {
-		slog.Error(err.Error())
-		c.JSON(400, gin.H{"error": err.Error()})
-		return nil
+	if bucketName == "" {
+		// Obtaining New Bucket Config From User
+		//
+		var req ObjectRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			slog.Error("failed to bind json: ", err)
+			c.JSON(400, gin.H{"error": err.Error()})
+			return nil
+		}
+
+		// Creating Bucket Instance Connection for User
+		//
+		res, err := badgerDB.PullKV(app.DB, "bucket-"+req.BucketId)
+		if err != nil {
+			slog.Error(err.Error())
+			c.JSON(400, gin.H{"error": err.Error()})
+			return nil
+		}
+
+		err = json.Unmarshal(res, &bucketConfig)
+		if err != nil {
+			slog.Error(err.Error())
+			c.JSON(400, gin.H{"error": err.Error()})
+			return nil
+		}
+
+	} else {
+		res, err := badgerDB.PullKV(app.DB, "bucket-"+bucketName)
+		if err != nil {
+			slog.Error(err.Error())
+			c.JSON(400, gin.H{"error": err.Error()})
+			return nil
+		}
+
+		err = json.Unmarshal(res, &bucketConfig)
+		if err != nil {
+			slog.Error(err.Error())
+			c.JSON(400, gin.H{"error": err.Error()})
+			return nil
+		}
 	}
 
 	authorized := false

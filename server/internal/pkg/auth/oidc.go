@@ -74,7 +74,7 @@ func (auth *Auth) Login(c *gin.Context) {
 	}
 
 	client := &http.Client{
-		Timeout:   time.Duration(auth.Config.Timeout) * time.Hour,
+		Timeout:   time.Duration(24) * time.Hour,
 		Transport: tr,
 	}
 
@@ -123,7 +123,7 @@ func (auth *Auth) Callback(c *gin.Context) {
 	}
 
 	client := &http.Client{
-		Timeout:   time.Duration(auth.Config.Timeout) * time.Hour,
+		Timeout:   time.Duration(24) * time.Hour,
 		Transport: tr,
 	}
 
@@ -235,7 +235,7 @@ func (auth *Auth) validateOIDC(authToken string) error {
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 	}
 	client := &http.Client{
-		Timeout:   time.Duration(auth.Config.Timeout) * time.Hour,
+		Timeout:   time.Duration(24) * time.Hour,
 		Transport: tr,
 	}
 

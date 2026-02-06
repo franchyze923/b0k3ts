@@ -4,5 +4,6 @@ miobc := mio.New(mio.BucketConfig{
 	SecretAccessKey: "Lny5JpC6MxpZ7EkD46Qs39D7S3L42BPUnBqqMvrL",
 	Secure:          false,
 	BucketName:      "photos-and-videos",
-	Location:        "",
+	Location:        "us-east-1",
+	Delimiter:,
 })

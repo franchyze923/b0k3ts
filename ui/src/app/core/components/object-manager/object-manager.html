@@ -22,6 +22,17 @@
         </mat-select>
       </mat-form-field>
 
+      <mat-form-field appearance="outline">
+        <mat-label>Upload prefix</mat-label>
+        <input
+          matInput
+          placeholder="e.g. reports/2026/"
+          [ngModel]="uploadPrefix()"
+          (ngModelChange)="uploadPrefix.set($event)"
+        />
+      </mat-form-field>
+
+
       <button mat-stroked-button type="button" (click)="refresh()">
         <mat-icon aria-hidden="true">refresh</mat-icon>
         Refresh
