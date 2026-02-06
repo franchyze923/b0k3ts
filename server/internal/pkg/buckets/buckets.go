@@ -4,11 +4,12 @@ import (
 	"b0k3ts/configs"
 	"b0k3ts/internal/pkg/auth"
 	badgerDB "b0k3ts/internal/pkg/badger"
-	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
+	"net/http"
 
 	"github.com/dgraph-io/badger/v4"
 	"github.com/gin-gonic/gin"
@@ -37,6 +38,15 @@ type BucketDeleteRequest struct {
 type ObjectRequest struct {
 	Prefix   string `json:"prefix"`
 	BucketId string `json:"bucket"`
+}
+
+type ObjectDownloadRequest struct {
+	Bucket   string `json:"bucket"`
+	Filename string `json:"filename"`
+}
+
+type ObjectDownloadResponse struct {
+	Content []byte `json:"content"`
 }
 
 type Buckets struct {
@@ -385,9 +395,7 @@ func (app *App) Upload(c *gin.Context) {
 
 	slog.Info("Successfully opened %s", fh.Filename)
 
-	buff := make([]byte, fh.Size)
-
-	info, err := mio.PutObject(ctx, bucketConfig.BucketName, fileName, bytes.NewReader(buff), int64(fh.Size),
+	info, err := mio.PutObject(ctx, bucketConfig.BucketName, fileName, file, int64(fh.Size),
 		minio.PutObjectOptions{ContentType: "application/octet-stream"})
 	if err != nil {
 		slog.Error(err.Error())
@@ -401,14 +409,34 @@ func (app *App) Upload(c *gin.Context) {
 	return
 }
 
-func (mio *Buckets) Download(filename string) ([]byte, error) {
+func (app *App) Download(c *gin.Context) {
+
+	var req ObjectDownloadRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		slog.Error("failed to bind json: ", err)
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+
+	bucketConfig := authorizeAndExtract(*app, c, req.Bucket)
+	if bucketConfig == nil {
+		return
+	}
 
 	ctx := context.Background()
 
-	object, err := mio.Client.GetObject(ctx, mio.Config.BucketName, filename, minio.GetObjectOptions{})
+	mio, err := Connect(*bucketConfig)
 	if err != nil {
 		slog.Error(err.Error())
-		return nil, err
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+
+	object, err := mio.GetObject(ctx, bucketConfig.BucketName, req.Filename, minio.GetObjectOptions{})
+	if err != nil {
+		slog.Error(err.Error())
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
 	}
 
 	defer object.Close()
@@ -416,11 +444,26 @@ func (mio *Buckets) Download(filename string) ([]byte, error) {
 	data, err := io.ReadAll(object)
 	if err != nil {
 		slog.Error(err.Error())
-		return nil, err
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
 	}
 
-	slog.Info("Successfully downloaded %s", filename)
-	return data, nil
+	stats, err := object.Stat()
+	if err != nil {
+		slog.Error(err.Error())
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+
+	slog.Info("Successfully downloaded %s", req.Filename)
+
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", req.Filename))
+	c.Header("Content-Type", "application/octet-stream")
+	c.Header("Content-Length", fmt.Sprintf("%d", stats.Size))
+
+	c.Data(http.StatusOK, "application/octet-stream", data)
+
+	return
 }
 
 func (mio *Buckets) Delete(filename string) error {

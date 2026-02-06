@@ -261,8 +261,38 @@ export class ObjectManager {
     const bucket = this.selectedBucket();
     if (!bucket) return;
 
-    await this.storage.deleteObject({ bucket, key: obj.key });
+    await this.storage.deleteObject({ bucket, filename: obj.key });
     await this.refresh();
+  }
+
+  private fileNameFromKey(key: string): string {
+    const clean = key.replace(/\/+$/, '');
+    const parts = clean.split('/');
+    return parts[parts.length - 1] || 'download';
+  }
+
+  async downloadObject(obj: BucketObject): Promise<void> {
+    const bucket = this.selectedBucket();
+    if (!bucket) return;
+
+    const blob = await this.storage.downloadObject({ bucket, filename: obj.key });
+
+    // const blob = new Blob([decodedString], {
+    //   type: obj.contentType || 'application/octet-stream',
+    // });
+
+    const url = URL.createObjectURL(blob);
+    try {
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = this.fileNameFromKey(obj.key);
+      a.rel = 'noopener';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    } finally {
+      URL.revokeObjectURL(url);
+    }
   }
 
   private getPrefixFromKey(key: string): string {

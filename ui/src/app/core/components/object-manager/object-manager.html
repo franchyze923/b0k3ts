@@ -85,6 +85,11 @@
           </button>
 
           <mat-menu #menu="matMenu">
+            <button mat-menu-item type="button" (click)="downloadObject(node.obj!)">
+              <mat-icon aria-hidden="true">download</mat-icon>
+              <span>Download</span>
+            </button>
+
             <button mat-menu-item type="button" (click)="moveObject(node.obj!)">
               <mat-icon aria-hidden="true">drive_file_move</mat-icon>
               <span>Move</span>

@@ -37,7 +37,7 @@ func (app *App) Serve() {
 		objects := v1.Group("/objects")
 		{
 			objects.POST("/upload", bucket.Upload)
-			//objects.GET("/download", bucket.DownloadObject)
+			objects.POST("/download", bucket.Download)
 			//objects.POST("/delete", bucket.DeleteObject)
 			objects.POST("/list", bucket.ListObjects)
 		}
