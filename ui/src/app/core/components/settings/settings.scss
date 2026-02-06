@@ -9,6 +9,10 @@
   align-items: end;
 }
 
+.grid .full {
+  grid-column: 1 / -1;
+}
+
 .actions-row {
   margin-top: 12px;
   display: flex;

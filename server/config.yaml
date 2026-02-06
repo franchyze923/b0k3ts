@@ -6,5 +6,5 @@ oidc:
   passRedirectUrl: http://localhost:4200/login?token=
   providerUrl: https://keycloak.cyberneticks.com/realms/master
   redirectUrl: http://localhost:8080/api/v1/oidc/callback
-  timeout: 60
+  timeout: 172800
   jwtSec: xFt5dYEAaRDF0YkwZS23mZmv5CKcjaoC 

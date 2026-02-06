@@ -39,6 +39,64 @@
       </mat-form-field>
 
       <mat-slide-toggle [(ngModel)]="draft().secure">Secure</mat-slide-toggle>
+
+      <!-- Authorized Users (chips + autocomplete) -->
+      <mat-form-field appearance="outline" class="full">
+        <mat-label>Authorized Users (emails)</mat-label>
+
+        <mat-chip-grid #userChipGrid aria-label="Authorized users">
+          <mat-chip-row *ngFor="let u of draft().authorized_users" (removed)="removeAuthorizedUser(u)">
+            {{ u }}
+            <button matChipRemove type="button" aria-label="Remove user">
+              <mat-icon aria-hidden="true">cancel</mat-icon>
+            </button>
+          </mat-chip-row>
+        </mat-chip-grid>
+
+        <input
+          matInput
+          placeholder="Type email and press Enter"
+          [matChipInputFor]="userChipGrid"
+          [matChipInputSeparatorKeyCodes]="[13, 188]"
+          (matChipInputTokenEnd)="addAuthorizedUserFromInput($event)"
+          [matAutocomplete]="userAuto"
+          [ngModel]="userChipInput()"
+          (ngModelChange)="userChipInput.set($event)"
+        />
+
+        <mat-autocomplete #userAuto="matAutocomplete" (optionSelected)="addAuthorizedUserFromOption($event)">
+          <mat-option *ngFor="let u of filteredUserSuggestions()" [value]="u">{{ u }}</mat-option>
+        </mat-autocomplete>
+      </mat-form-field>
+
+      <!-- Authorized Groups (chips + autocomplete) -->
+      <mat-form-field appearance="outline" class="full">
+        <mat-label>Authorized Groups</mat-label>
+
+        <mat-chip-grid #groupChipGrid aria-label="Authorized groups">
+          <mat-chip-row *ngFor="let g of draft().authorized_groups" (removed)="removeAuthorizedGroup(g)">
+            {{ g }}
+            <button matChipRemove type="button" aria-label="Remove group">
+              <mat-icon aria-hidden="true">cancel</mat-icon>
+            </button>
+          </mat-chip-row>
+        </mat-chip-grid>
+
+        <input
+          matInput
+          placeholder="Type group and press Enter"
+          [matChipInputFor]="groupChipGrid"
+          [matChipInputSeparatorKeyCodes]="[13, 188]"
+          (matChipInputTokenEnd)="addAuthorizedGroupFromInput($event)"
+          [matAutocomplete]="groupAuto"
+          [ngModel]="groupChipInput()"
+          (ngModelChange)="groupChipInput.set($event)"
+        />
+
+        <mat-autocomplete #groupAuto="matAutocomplete" (optionSelected)="addAuthorizedGroupFromOption($event)">
+          <mat-option *ngFor="let g of filteredGroupSuggestions()" [value]="g">{{ g }}</mat-option>
+        </mat-autocomplete>
+      </mat-form-field>
     </div>
 
     <div class="actions-row">

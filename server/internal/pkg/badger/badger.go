@@ -20,6 +20,19 @@ func InitializeDatabase() *badgerDB.DB {
 
 }
 
+func DeleteKV(db *badgerDB.DB, key string) error {
+
+	err := db.Update(func(txn *badgerDB.Txn) error {
+		return txn.Delete([]byte(key))
+	})
+
+	if err != nil {
+		slog.Error(err.Error())
+		return err
+	}
+	return nil
+}
+
 func PullKV(db *badgerDB.DB, key string) ([]byte, error) {
 
 	var valCopy []byte

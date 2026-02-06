@@ -16,7 +16,7 @@
         <mat-label>Bucket</mat-label>
         <mat-select
           [ngModel]="selectedBucket()"
-          (ngModelChange)="selectedBucket.set($event)"
+          (ngModelChange)="selectedBucket.set($event); refresh()"
         >
           <mat-option *ngFor="let b of buckets()" [value]="b">{{ b }}</mat-option>
         </mat-select>
@@ -27,57 +27,76 @@
         Refresh
       </button>
 
-      <label class="upload-btn">
-        <input type="file" multiple (change)="onUploadFiles($any($event.target).files)" />
-        <button mat-flat-button color="primary" type="button">
-          <mat-icon aria-hidden="true">upload</mat-icon>
-          Upload
-        </button>
-      </label>
+      <!-- Reliable upload control -->
+      <input
+        #fileInput
+        type="file"
+        multiple
+        hidden
+        (change)="onUploadFiles(fileInput.files); fileInput.value = ''"
+      />
+
+      <button
+        mat-flat-button
+        color="primary"
+        type="button"
+        (click)="fileInput.click()"
+      >
+        <mat-icon aria-hidden="true">upload</mat-icon>
+        Upload
+      </button>
     </div>
 
-    <div class="table-wrap">
-      <table mat-table [dataSource]="objects()" class="mat-elevation-z0">
-        <ng-container matColumnDef="key">
-          <th mat-header-cell *matHeaderCellDef>Key</th>
-          <td mat-cell *matCellDef="let obj">
-            <code class="key">{{ obj.key }}</code>
-          </td>
-        </ng-container>
+    <div class="tree-wrap">
+      <mat-tree [dataSource]="dataSource" [treeControl]="treeControl">
+        <mat-tree-node *matTreeNodeDef="let node" matTreeNodePadding>
+          <button mat-icon-button disabled></button>
 
-        <ng-container matColumnDef="size">
-          <th mat-header-cell *matHeaderCellDef>Size</th>
-          <td mat-cell *matCellDef="let obj">{{ formatBytes(obj.sizeBytes) }}</td>
-        </ng-container>
+          <mat-icon aria-hidden="true">description</mat-icon>
 
-        <ng-container matColumnDef="lastModified">
-          <th mat-header-cell *matHeaderCellDef>Last modified</th>
-          <td mat-cell *matCellDef="let obj">{{ obj.lastModifiedIso }}</td>
-        </ng-container>
+          <span class="node-name">
+            <code>{{ node.name }}</code>
+          </span>
 
-        <ng-container matColumnDef="actions">
-          <th mat-header-cell *matHeaderCellDef></th>
-          <td mat-cell *matCellDef="let obj" class="actions">
-            <button mat-icon-button [matMenuTriggerFor]="menu" aria-label="Object actions">
-              <mat-icon aria-hidden="true">more_vert</mat-icon>
+          <span class="node-meta" *ngIf="node.obj">
+            &nbsp;{{ formatBytes(node.obj.sizeBytes) }}
+          </span>
+
+          <span class="spacer"></span>
+
+          <button
+            mat-icon-button
+            [matMenuTriggerFor]="menu"
+            aria-label="File actions"
+            *ngIf="node.obj"
+          >
+            <mat-icon aria-hidden="true">more_vert</mat-icon>
+          </button>
+
+          <mat-menu #menu="matMenu">
+            <button mat-menu-item type="button" (click)="moveObject(node.obj!)">
+              <mat-icon aria-hidden="true">drive_file_move</mat-icon>
+              <span>Move</span>
             </button>
+            <button mat-menu-item type="button" (click)="deleteObject(node.obj!)">
+              <mat-icon aria-hidden="true">delete</mat-icon>
+              <span>Delete</span>
+            </button>
+          </mat-menu>
+        </mat-tree-node>
 
-            <mat-menu #menu="matMenu">
-              <button mat-menu-item type="button" (click)="moveObject(obj)">
-                <mat-icon aria-hidden="true">drive_file_move</mat-icon>
-                <span>Move</span>
-              </button>
-              <button mat-menu-item type="button" (click)="deleteObject(obj)">
-                <mat-icon aria-hidden="true">delete</mat-icon>
-                <span>Delete</span>
-              </button>
-            </mat-menu>
-          </td>
-        </ng-container>
+        <mat-tree-node *matTreeNodeDef="let node; when: hasChild" matTreeNodePadding>
+          <button mat-icon-button matTreeNodeToggle [attr.aria-label]="'Toggle ' + node.name">
+            <mat-icon aria-hidden="true">
+              {{ treeControl.isExpanded(node) ? 'expand_more' : 'chevron_right' }}
+            </mat-icon>
+          </button>
 
-        <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
-        <tr mat-row *matRowDef="let row; columns: displayedColumns"></tr>
-      </table>
+          <mat-icon aria-hidden="true">folder</mat-icon>
+
+          <span class="node-name">{{ node.name }}</span>
+        </mat-tree-node>
+      </mat-tree>
     </div>
   </mat-card-content>
 </mat-card>
