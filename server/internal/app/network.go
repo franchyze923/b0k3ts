@@ -38,7 +38,7 @@ func (app *App) Serve() {
 		{
 			objects.POST("/upload", bucket.Upload)
 			objects.POST("/download", bucket.Download)
-			//objects.POST("/delete", bucket.DeleteObject)
+			objects.POST("/delete", bucket.Delete)
 			objects.POST("/list", bucket.ListObjects)
 		}
 

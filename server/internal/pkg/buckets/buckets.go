@@ -44,6 +44,10 @@ type ObjectDownloadRequest struct {
 	Bucket   string `json:"bucket"`
 	Filename string `json:"filename"`
 }
+type ObjectDeleteRequest struct {
+	Bucket   string `json:"bucket"`
+	Filename string `json:"filename"`
+}
 
 type ObjectDownloadResponse struct {
 	Content []byte `json:"content"`
@@ -466,18 +470,39 @@ func (app *App) Download(c *gin.Context) {
 	return
 }
 
-func (mio *Buckets) Delete(filename string) error {
+func (app *App) Delete(c *gin.Context) {
+
+	var req ObjectDeleteRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		slog.Error("failed to bind json: ", err)
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+
+	bucketConfig := authorizeAndExtract(*app, c, req.Bucket)
+	if bucketConfig == nil {
+		return
+	}
 
 	ctx := context.Background()
 
-	err := mio.Client.RemoveObject(ctx, mio.Config.BucketName, filename, minio.RemoveObjectOptions{})
+	mio, err := Connect(*bucketConfig)
 	if err != nil {
 		slog.Error(err.Error())
-		return err
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
 	}
 
-	slog.Info("Successfully deleted %s", filename)
-	return nil
+	err = mio.RemoveObject(ctx, req.Bucket, req.Filename, minio.RemoveObjectOptions{})
+	if err != nil {
+		slog.Error(err.Error())
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+
+	slog.Info("Successfully deleted %s", req.Filename)
+	c.JSON(200, gin.H{"message": "Object deleted successfully"})
+	return
 }
 
 func (mio *Buckets) ListBuckets() ([]string, error) {
