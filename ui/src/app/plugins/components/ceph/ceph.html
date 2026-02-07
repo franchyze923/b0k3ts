@@ -1,29 +1,101 @@
 <div class="ceph-page">
-  <mat-card>
+  <mat-card class="settings-card-header">
     <mat-card-title>Ceph Plugin</mat-card-title>
-    <mat-card-subtitle>Create and delete buckets</mat-card-subtitle>
-
+    <mat-card-subtitle>Apply ObjectBucketClaim (OBC) YAML and manage buckets</mat-card-subtitle>
+<br>
     @if (loading()) {
       <mat-progress-bar mode="indeterminate" />
     }
 
+    <div class="settings-row">
+      <mat-form-field appearance="outline" class="ns-input">
+        <mat-label>Namespace</mat-label>
+        <input
+          matInput
+          [ngModel]="namespace()"
+          (ngModelChange)="namespace.set($event)"
+          placeholder="e.g. rook-ceph"
+        />
+      </mat-form-field>
+
+      <mat-form-field appearance="outline" class="mode-input">
+        <mat-label>Communication</mat-label>
+        <mat-select [ngModel]="commMode()" (ngModelChange)="commMode.set($event)">
+          <mat-option value="incluster">In-cluster</mat-option>
+          <mat-option value="kubeconfig">Kubeconfig</mat-option>
+        </mat-select>
+      </mat-form-field>
+
+      @if (needsKubeconfigName()) {
+        <mat-form-field appearance="outline" class="kubeconfig-input">
+          <mat-label>Kubeconfig name</mat-label>
+          <input
+            matInput
+            [ngModel]="kubeconfigName()"
+            (ngModelChange)="kubeconfigName.set($event)"
+            placeholder="e.g. dev"
+          />
+        </mat-form-field>
+      }
+
+      <button mat-button type="button" (click)="refresh()" [disabled]="loading()">
+        Refresh
+      </button>
+    </div>
+
     <div class="create-row">
       <mat-form-field appearance="outline" class="bucket-input">
-        <mat-label>Bucket name</mat-label>
+        <mat-label>OBC name (metadata.name)</mat-label>
+        <input
+          matInput
+          [ngModel]="obcName()"
+          (ngModelChange)="obcName.set($event)"
+          placeholder="e.g. my-first-bucket"
+        />
+      </mat-form-field>
+
+      <mat-form-field appearance="outline" class="bucket-input">
+        <mat-label>Bucket name (spec.bucketName)</mat-label>
         <input
           matInput
           [ngModel]="bucketName()"
           (ngModelChange)="bucketName.set($event)"
-          placeholder="e.g. reports-2026"
+          placeholder="e.g. photos-and-videos"
+        />
+      </mat-form-field>
+
+      <mat-form-field appearance="outline" class="bucket-input">
+        <mat-label>ObjectBucket name (spec.objectBucketName)</mat-label>
+        <input
+          matInput
+          [ngModel]="objectBucketName()"
+          (ngModelChange)="objectBucketName.set($event)"
+          placeholder="optional (defaults to obc-&lt;namespace&gt;-&lt;obcName&gt;)"
+        />
+      </mat-form-field>
+
+      <mat-form-field appearance="outline" class="bucket-input">
+        <mat-label>StorageClass (spec.storageClassName)</mat-label>
+        <input
+          matInput
+          [ngModel]="storageClassName()"
+          (ngModelChange)="storageClassName.set($event)"
+          placeholder="e.g. rook-ceph-bucket"
+        />
+      </mat-form-field>
+
+      <mat-form-field appearance="outline" class="bucket-input">
+        <mat-label>Provisioner label (metadata.labels.bucket-provisioner)</mat-label>
+        <input
+          matInput
+          [ngModel]="bucketProvisionerLabel()"
+          (ngModelChange)="bucketProvisionerLabel.set($event)"
+          placeholder="e.g. rook-ceph.ceph.rook.io-bucket"
         />
       </mat-form-field>
 
       <button mat-flat-button color="primary" type="button" (click)="create()" [disabled]="!canSubmit()">
-        Create
-      </button>
-
-      <button mat-button type="button" (click)="refresh()" [disabled]="loading()">
-        Refresh
+        Apply OBC
       </button>
     </div>
   </mat-card>
@@ -43,16 +115,34 @@
     @if (buckets().length === 0) {
       <div class="empty">No buckets found.</div>
     } @else {
-      <div class="bucket-list">
-        @for (b of buckets(); track trackByBucket($index, b)) {
-          <div class="bucket-row">
-            <div class="bucket-name">{{ b }}</div>
+      <div class="table-wrap">
+        <table mat-table [dataSource]="buckets()" class="buckets-table">
+          <ng-container matColumnDef="obc">
+            <th mat-header-cell *matHeaderCellDef>ObjectBucketClaim (OBC)</th>
+            <td mat-cell *matCellDef="let row">{{ row.obc }}</td>
+          </ng-container>
 
-            <button mat-button color="warn" type="button" (click)="delete(b)" [disabled]="loading()">
-              Delete
-            </button>
-          </div>
-        }
+          <ng-container matColumnDef="bucket_name">
+            <th mat-header-cell *matHeaderCellDef>Bucket Name</th>
+            <td mat-cell *matCellDef="let row">{{ row.bucket_name }}</td>
+          </ng-container>
+
+          <ng-container matColumnDef="actions">
+            <th mat-header-cell *matHeaderCellDef></th>
+            <td mat-cell *matCellDef="let row" class="actions-cell">
+              <button mat-button type="button" (click)="getCredentials(row)" [disabled]="loading()">
+                Get Credentials
+              </button>
+
+              <button mat-button color="warn" type="button" (click)="delete(row)" [disabled]="loading()">
+                Delete
+              </button>
+            </td>
+          </ng-container>
+
+          <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+          <tr mat-row *matRowDef="let row; columns: displayedColumns; "></tr>
+        </table>
       </div>
     }
   </mat-card>

@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"log/slog"
 	"net/http"
 	"regexp"
@@ -531,33 +530,29 @@ func (h *handler) ListObjectBucketClaims(c *gin.Context) {
 
 	for _, item := range list.Items {
 
-		// 1. Parse the raw JSON into a map
-		var raw map[string]interface{}
-		err := json.Unmarshal([]byte(item), &raw)
-		if err != nil {
-			log.Fatal(err)
-		}
+		innerObject, ok := item.Object["spec"].(map[string]interface{})
+		if ok {
 
-		// 2. Access the "Object" field
-		innerObject, ok := raw["Object"].(map[string]interface{})
-		if !ok {
-			log.Fatal("Could not find 'Object' key")
-		}
+			if bucketName, ok := innerObject["bucketName"].(string); ok {
+				bucketNames = append(bucketNames, BucketListRequest{
+					OBC:        item.GetName(),
+					BucketName: bucketName,
+				})
 
-		// 3. Use NestedString to dig into "spec" -> "bucketName"
-		// This handles the nil checks for you!
-		bucketName, found, err := unstructured.NestedString(innerObject, "spec", "bucketName")
+			} else {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid OBC format"})
+				return
+			}
 
-		bucket := BucketListRequest{
-			OBC:        item.GetName(),
-			BucketName: bucketName,
+		} else {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid OBC format"})
+			return
 		}
-		bucketNames = append(bucketNames, bucket)
 
 	}
 
 	// Return as-is (unstructured list is already JSON-friendly).
-	c.JSON(http.StatusOK, list.Items[0])
+	c.JSON(http.StatusOK, bucketNames)
 }
 
 func (h *handler) ApplyObjectBucketClaim(c *gin.Context) {

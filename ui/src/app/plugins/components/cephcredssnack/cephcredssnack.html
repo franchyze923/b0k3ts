@@ -1,0 +1,62 @@
+<div class="ceph-creds">
+  <div class="ceph-creds__header">
+    <div>
+      <div class="ceph-creds__title">{{ data.title }}</div>
+      <div class="ceph-creds__subtitle">Click the copy icon to copy a value.</div>
+    </div>
+
+    <button mat-icon-button type="button" aria-label="Close" (click)="close()">
+      <mat-icon aria-hidden="true">close</mat-icon>
+    </button>
+  </div>
+
+  <div class="ceph-creds__grid">
+    <div class="ceph-creds__field">
+      <div class="ceph-creds__label">AWS_ACCESS_KEY_ID</div>
+      <div class="ceph-creds__box">
+        <code class="ceph-creds__value">{{ accessKeyId || '—' }}</code>
+
+        <button
+          mat-icon-button
+          type="button"
+          [disabled]="!accessKeyId"
+          (click)="copy(accessKeyId, 'Access key copied')"
+          matTooltip="Copy"
+          aria-label="Copy access key"
+        >
+          <mat-icon aria-hidden="true">content_copy</mat-icon>
+        </button>
+      </div>
+    </div>
+    <br>
+
+    <div class="ceph-creds__field">
+      <div class="ceph-creds__label">AWS_SECRET_ACCESS_KEY</div>
+      <div class="ceph-creds__box ceph-creds__box--secret">
+        <code class="ceph-creds__value">{{ secretKey || '—' }}</code>
+
+        <button
+          mat-icon-button
+          type="button"
+          [disabled]="!secretKey"
+          (click)="copy(secretKey, 'Secret key copied')"
+          matTooltip="Copy"
+          aria-label="Copy secret key"
+        >
+          <mat-icon aria-hidden="true">content_copy</mat-icon>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="ceph-creds__footer">
+    <button mat-stroked-button type="button" (click)="copyJson()" [disabled]="!accessKeyId && !secretKey">
+      <mat-icon aria-hidden="true">data_object</mat-icon>
+      Copy JSON
+    </button>
+
+    <span class="ceph-creds__spacer"></span>
+
+    <button mat-flat-button color="primary" type="button" (click)="close()">Done</button>
+  </div>
+</div>

@@ -1,6 +1,5 @@
 .om-card {
-  background: var(--surface);
-  border: 1px solid var(--border);
+  padding: 12px;
 }
 
 .chips {
@@ -24,7 +23,8 @@
   display: none;
 }
 
-.table-wrap {
+.tree-wrap {
+  margin-top: 12px;
   border: 1px solid var(--border);
   border-radius: 12px;
   overflow: hidden;

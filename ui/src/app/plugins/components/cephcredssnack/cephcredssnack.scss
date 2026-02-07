@@ -1,0 +1,70 @@
+.ceph-creds {
+  padding: 24px;
+  width: auto;
+
+}
+.ceph-creds__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+.ceph-creds__title {
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+}
+.ceph-creds__subtitle {
+  margin-top: 2px;
+  font-size: 12px;
+  opacity: 0.75;
+}
+.ceph-creds__grid {
+  display: grid;
+  gap: 12px;
+}
+
+
+@media (min-width: 720px) {
+  .ceph-creds__grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+.ceph-creds__label {
+  font-size: 12px;
+  opacity: 0.8;
+  margin: 0 0 6px;
+}
+.ceph-creds__box {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02));
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.25);
+}
+.ceph-creds__box--secret {
+  border-color: rgba(255, 255, 255, 0.18);
+}
+.ceph-creds__value {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+  font-size: 12px;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  user-select: text;
+}
+.ceph-creds__footer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 14px;
+}
+.ceph-creds__spacer {
+  flex: 1;
+}

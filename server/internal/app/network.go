@@ -17,6 +17,9 @@ func (app *App) Serve() {
 	// Create a Gin router
 	r := gin.Default()
 
+	//
+	var oic configs.OIDC
+
 	res, err := badgerDB.PullKV(app.BadgerDB, "oidc-config")
 	if err != nil {
 		if err.Error() == "Key not found" {
@@ -26,16 +29,15 @@ func (app *App) Serve() {
 			return
 		}
 		//return
+
 	}
 
-	// Unmarshaling Config
-	//
-	var oic configs.OIDC
-
-	err = json.Unmarshal(res, &oic)
-	if err != nil {
-		slog.Error(err.Error())
-		return
+	if err == nil {
+		err = json.Unmarshal(res, &oic)
+		if err != nil {
+			slog.Error(err.Error())
+			return
+		}
 	}
 
 	oAuth := auth.New(app.Config, oic, app.BadgerDB)

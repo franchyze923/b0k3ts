@@ -3,6 +3,10 @@
   gap: 16px;
 }
 
+.settings-card-header {
+  padding: 12px;
+}
+
 .create-row {
   display: flex;
   gap: 12px;
@@ -16,30 +20,31 @@
   flex: 1 1 420px;
 }
 
+.list-card {
+  padding: 12px;
+}
+
 .list-card .empty {
   opacity: 0.7;
   padding: 12px 0;
 }
 
-.bucket-list {
-  display: grid;
-  gap: 8px;
+.table-wrap {
   margin-top: 12px;
+  overflow: auto;
 }
 
-.bucket-row {
+.buckets-table {
+  width: 100%;
+}
+
+.actions-cell {
+  white-space: nowrap;
+  text-align: right;
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 8px 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.bucket-name {
-  font-weight: 500;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  justify-content: flex-end;
+  gap: 8px;
+  min-height: 60px;
 }
 
 .creds-card .creds-pre {

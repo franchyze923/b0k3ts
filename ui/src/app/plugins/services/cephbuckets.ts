@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 
 export type CephBucketCredentials = {
@@ -12,51 +12,131 @@ export type CephBucketCredentials = {
   location?: string;
 };
 
+export type KubernetesCommMode = 'incluster' | 'kubeconfig';
+
+export type ListBucketsOptions = {
+  namespace: string;
+  mode: KubernetesCommMode;
+  kubeconfigName?: string;
+};
+
+export type CephBucketRef = {
+  bucket_name: string;
+  obc: string;
+};
+
 @Injectable({ providedIn: 'root' })
 export class CephBucketsService {
   private readonly apiBase = ''; // keep '' for same-origin; proxy handles /api/v1
 
   constructor(private readonly http: HttpClient) {}
 
-  async listBuckets(): Promise<string[]> {
-    const url = `${this.apiBase}/api/v1/kubernetes/obc/rook-ceph?mode=kubeconfig&config=dev`;
+  async listBuckets(opts: ListBucketsOptions): Promise<CephBucketRef[]> {
+    const ns = encodeURIComponent(opts.namespace.trim());
+    const params = new URLSearchParams();
 
-    // Backend might return string[] OR { buckets: string[] }
+    params.set('mode', opts.mode);
+
+    if (opts.mode === 'kubeconfig') {
+      const cfg = (opts.kubeconfigName ?? '').trim();
+      if (cfg) params.set('config', cfg);
+    }
+
+    const url = `${this.apiBase}/api/v1/kubernetes/obc/${ns}?${params.toString()}`;
+
     const res = await firstValueFrom(this.http.get<unknown>(url));
 
-    if (Array.isArray(res) && res.every((x) => typeof x === 'string')) return res;
-
-    if (
-      res &&
-      typeof res === 'object' &&
-      'buckets' in res &&
-      Array.isArray((res as { buckets: unknown }).buckets)
-    ) {
-      return (res as { buckets: unknown[] }).buckets.filter((x): x is string => typeof x === 'string');
+    // New shape: [{ bucket_name, obc }]
+    if (Array.isArray(res)) {
+      return res
+        .filter((x): x is Record<string, unknown> => !!x && typeof x === 'object')
+        .map((x) => ({
+          bucket_name: typeof x['bucket_name'] === 'string' ? x['bucket_name'] : '',
+          obc: typeof x['obc'] === 'string' ? x['obc'] : '',
+        }))
+        .filter((x) => x.bucket_name.length > 0);
     }
 
     return [];
   }
 
-  async createBucket(bucketName: string): Promise<CephBucketCredentials> {
-    const url = `${this.apiBase}/api/v1/buckets/create`;
+  async getBucketCredentials(opts: ListBucketsOptions, obc: string): Promise<CephBucketCredentials> {
+    const ns = encodeURIComponent(opts.namespace.trim());
+    const obcName = encodeURIComponent(obc.trim());
 
-    // If your backend expects a different field name, tell me (e.g. { name }).
+    const params = new URLSearchParams();
+    params.set('mode', opts.mode);
+
+    if (opts.mode === 'kubeconfig') {
+      const cfg = (opts.kubeconfigName ?? '').trim();
+      if (cfg) params.set('config', cfg);
+    }
+
+    const url = `${this.apiBase}/api/v1/kubernetes/obc/${ns}/${obcName}/secret?${params.toString()}`;
+    return await firstValueFrom(this.http.get<CephBucketCredentials>(url));
+  }
+
+  async applyObjectBucketClaim(opts: ListBucketsOptions, yaml: string): Promise<unknown> {
+    const ns = encodeURIComponent(opts.namespace.trim());
+    const params = new URLSearchParams();
+
+    params.set('mode', opts.mode);
+
+    if (opts.mode === 'kubeconfig') {
+      const cfg = (opts.kubeconfigName ?? '').trim();
+      if (cfg) params.set('config', cfg);
+    }
+
+    const url = `${this.apiBase}/api/v1/kubernetes/obc/${ns}/apply?${params.toString()}`;
+
+    // Send raw YAML (common for “apply”-style endpoints)
+    const headers = new HttpHeaders({
+      'Content-Type': 'application/yaml',
+      Accept: 'application/json',
+    });
+
     return await firstValueFrom(
-      this.http.post<CephBucketCredentials>(url, {
-        bucket_name: bucketName,
+      this.http.post(url, yaml, {
+        headers,
+        responseType: 'json',
       }),
     );
   }
 
-  async deleteBucket(bucketName: string): Promise<void> {
-    const url = `${this.apiBase}/api/v1/buckets/delete`;
+  // async createBucket(bucketName: string): Promise<CephBucketCredentials> {
+  //   const url = `${this.apiBase}/api/v1/buckets/create`;
+  //
+  //   return await firstValueFrom(
+  //     this.http.post<CephBucketCredentials>(url, {
+  //       bucket_name: bucketName,
+  //     }),
+  //   );
+  // }
 
-    // If your backend expects a different field name, tell me (e.g. { name }).
-    await firstValueFrom(
-      this.http.post<void>(url, {
-        bucket_name: bucketName,
-      }),
-    );
+  async deleteObjectBucketClaim(opts: ListBucketsOptions, obc: string): Promise<void> {
+    const ns = encodeURIComponent(opts.namespace.trim());
+    const obcName = encodeURIComponent(obc.trim());
+
+    const params = new URLSearchParams();
+    params.set('mode', opts.mode);
+
+    if (opts.mode === 'kubeconfig') {
+      const cfg = (opts.kubeconfigName ?? '').trim();
+      if (cfg) params.set('config', cfg);
+    }
+
+    const url = `${this.apiBase}/api/v1/kubernetes/obc/${ns}/${obcName}?${params.toString()}`;
+
+    await firstValueFrom(this.http.delete<void>(url));
   }
+
+  // async deleteBucket(bucketName: string): Promise<void> {
+  //   const url = `${this.apiBase}/api/v1/buckets/delete`;
+  //
+  //   await firstValueFrom(
+  //     this.http.post<void>(url, {
+  //       bucket_name: bucketName,
+  //     }),
+  //   );
+  // }
 }

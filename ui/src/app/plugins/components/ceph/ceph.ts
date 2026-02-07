@@ -8,8 +8,12 @@ import { MatInputModule } from '@angular/material/input';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
-import {CephBucketCredentials, CephBucketsService} from '../../services/cephbuckets';
-import {JsonPipe} from '@angular/common';
+import { MatSelectModule } from '@angular/material/select';
+import { MatTableModule } from '@angular/material/table';
+import { MatDialog, MatDialogModule } from '@angular/material/dialog';
+import { CephBucketCredentials, CephBucketsService, CephBucketRef, KubernetesCommMode } from '../../services/cephbuckets';
+import { JsonPipe } from '@angular/common';
+import { CephCredsDialogComponent } from '../cephcredssnack/cephcredssnack';
 
 @Component({
   selector: 'app-ceph',
@@ -22,31 +26,95 @@ import {JsonPipe} from '@angular/common';
     MatIconModule,
     MatProgressBarModule,
     MatSnackBarModule,
+    MatSelectModule,
+    MatTableModule,
+    MatDialogModule,
     JsonPipe,
   ],
   templateUrl: './ceph.html',
   styleUrl: './ceph.scss',
 })
 export class Ceph {
-  readonly bucketName = signal<string>('');
+  // OBC (Kubernetes) fields
+  readonly obcName = signal<string>(''); // metadata.name
+  readonly bucketName = signal<string>(''); // spec.bucketName
+  readonly objectBucketName = signal<string>(''); // spec.objectBucketName (optional; auto-filled if empty)
+  readonly storageClassName = signal<string>(''); // spec.storageClassName
+  readonly bucketProvisionerLabel = signal<string>('rook-ceph.ceph.rook.io-bucket'); // metadata.labels.bucket-provisioner
+
   readonly loading = signal<boolean>(false);
 
-  readonly buckets = signal<string[]>([]);
+  readonly buckets = signal<CephBucketRef[]>([]);
   readonly lastCreated = signal<CephBucketCredentials | null>(null);
 
-  readonly canSubmit = computed(() => this.bucketName().trim().length > 0 && !this.loading());
+  readonly namespace = signal<string>('rook-ceph');
+  readonly commMode = signal<KubernetesCommMode>('kubeconfig');
+  readonly kubeconfigName = signal<string>('dev');
+
+  readonly displayedColumns: ReadonlyArray<'obc' | 'bucket_name' | 'actions'> = ['obc', 'bucket_name', 'actions'];
+
+  readonly needsKubeconfigName = computed(() => this.commMode() === 'kubeconfig');
+
+  readonly canSubmit = computed(() => {
+    const nsOk = this.namespace().trim().length > 0;
+    const obcOk = this.obcName().trim().length > 0;
+    const bucketOk = this.bucketName().trim().length > 0;
+    const scOk = this.storageClassName().trim().length > 0;
+    const cfgOk = this.commMode() !== 'kubeconfig' || this.kubeconfigName().trim().length > 0;
+    return nsOk && obcOk && bucketOk && scOk && cfgOk && !this.loading();
+  });
 
   constructor(
     private readonly ceph: CephBucketsService,
     private readonly snack: MatSnackBar,
+    private readonly dialog: MatDialog,
   ) {
     void this.refresh();
   }
 
+  private buildObcYaml(): string {
+    const ns = this.namespace().trim();
+    const obc = this.obcName().trim();
+    const bucket = this.bucketName().trim();
+
+    const objectBucket =
+      this.objectBucketName().trim().length > 0 ? this.objectBucketName().trim() : `obc-${ns}-${obc}`;
+
+    const sc = this.storageClassName().trim();
+    const prov = this.bucketProvisionerLabel().trim();
+
+    // Keep it explicit and backend-friendly (no fancy YAML features)
+    return [
+      `apiVersion: objectbucket.io/v1alpha1`,
+      `kind: ObjectBucketClaim`,
+      `metadata:`,
+      `  labels:`,
+      `    bucket-provisioner: ${prov}`,
+      `  name: ${obc}`,
+      `  namespace: ${ns}`,
+      `spec:`,
+      `  bucketName: ${bucket}`,
+      `  objectBucketName: ${objectBucket}`,
+      `  storageClassName: ${sc}`,
+      ``,
+    ].join('\n');
+  }
+
   async refresh(): Promise<void> {
+    const ns = this.namespace().trim();
+    if (!ns) {
+      this.snack.open('Namespace is required', 'Dismiss', { duration: 3000 });
+      this.buckets.set([]);
+      return;
+    }
+
     this.loading.set(true);
     try {
-      const list = await this.ceph.listBuckets();
+      const list = await this.ceph.listBuckets({
+        namespace: ns,
+        mode: this.commMode(),
+        kubeconfigName: this.kubeconfigName(),
+      });
       this.buckets.set(list);
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Failed to load buckets';
@@ -58,41 +126,112 @@ export class Ceph {
   }
 
   async create(): Promise<void> {
-    const name = this.bucketName().trim();
-    if (!name) return;
+    if (!this.canSubmit()) return;
+
+    const ns = this.namespace().trim();
+    const yaml = this.buildObcYaml();
 
     this.loading.set(true);
     this.lastCreated.set(null);
 
     try {
-      const creds = await this.ceph.createBucket(name);
-      this.lastCreated.set({ ...creds, bucket_name: creds.bucket_name ?? name });
-      this.snack.open(`Bucket "${name}" created`, 'Dismiss', { duration: 3000 });
-      this.bucketName.set('');
+      await this.ceph.applyObjectBucketClaim(
+        {
+          namespace: ns,
+          mode: this.commMode(),
+          kubeconfigName: this.kubeconfigName(),
+        },
+        yaml,
+      );
+
+      this.snack.open(`OBC "${this.obcName().trim()}" applied in namespace "${ns}"`, 'Dismiss', { duration: 3500 });
+
+      // Optional: clear only the names if you want to quickly create multiple
+      // this.obcName.set('');
+      // this.bucketName.set('');
+      // this.objectBucketName.set('');
+
       await this.refresh();
     } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Failed to create bucket';
-      this.snack.open(msg, 'Dismiss', { duration: 4000 });
+      const msg = e instanceof Error ? e.message : 'Failed to apply ObjectBucketClaim';
+      this.snack.open(msg, 'Dismiss', { duration: 4500 });
     } finally {
       this.loading.set(false);
     }
   }
 
-  async delete(bucket: string): Promise<void> {
-    if (!bucket) return;
+  async getCredentials(row: CephBucketRef): Promise<void> {
+    const ns = this.namespace().trim();
+    if (!ns) {
+      this.snack.open('Namespace is required', 'Dismiss', { duration: 3000 });
+      return;
+    }
+    if (!row?.obc?.trim()) {
+      this.snack.open('Missing OBC name', 'Dismiss', { duration: 3000 });
+      return;
+    }
 
     this.loading.set(true);
     try {
-      await this.ceph.deleteBucket(bucket);
-      this.snack.open(`Bucket "${bucket}" deleted`, 'Dismiss', { duration: 3000 });
-      await this.refresh();
+      const creds = await this.ceph.getBucketCredentials(
+        {
+          namespace: ns,
+          mode: this.commMode(),
+          kubeconfigName: this.kubeconfigName(),
+        },
+        row.obc,
+      );
+
+      const ref = this.dialog.open(CephCredsDialogComponent, {
+        data: {
+          title: `Credentials for OBC "${row.obc}"`,
+          credentials: creds as { AWS_ACCESS_KEY_ID?: string; AWS_SECRET_ACCESS_KEY?: string },
+        },
+        autoFocus: false,
+        restoreFocus: true,
+        hasBackdrop: true,
+        panelClass: 'ceph-creds-dialog-panel',
+      });
+
+      window.setTimeout(() => ref.close(), 20000);
     } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Failed to delete bucket';
+      const msg = e instanceof Error ? e.message : 'Failed to get credentials';
       this.snack.open(msg, 'Dismiss', { duration: 4000 });
     } finally {
       this.loading.set(false);
     }
   }
 
-  trackByBucket = (_: number, b: string) => b;
+  async delete(bucket: CephBucketRef): Promise<void> {
+    const ns = this.namespace().trim();
+    if (!ns) {
+      this.snack.open('Namespace is required', 'Dismiss', { duration: 3000 });
+      return;
+    }
+    if (!bucket?.obc?.trim()) {
+      this.snack.open('Missing OBC name', 'Dismiss', { duration: 3000 });
+      return;
+    }
+
+    this.loading.set(true);
+    try {
+      await this.ceph.deleteObjectBucketClaim(
+        {
+          namespace: ns,
+          mode: this.commMode(),
+          kubeconfigName: this.kubeconfigName(),
+        },
+        bucket.obc,
+      );
+
+      this.snack.open(`OBC "${bucket.obc}" deleted`, 'Dismiss', { duration: 3000 });
+      await this.refresh();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Failed to delete OBC';
+      this.snack.open(msg, 'Dismiss', { duration: 4000 });
+    } finally {
+      this.loading.set(false);
+    }
+  }
+  trackByBucket = (_: number, b: CephBucketRef) => `${b.bucket_name}::${b.obc}`;
 }
