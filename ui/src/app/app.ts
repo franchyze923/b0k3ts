@@ -31,7 +31,7 @@ import { MatMenuModule } from '@angular/material/menu';
   styleUrl: './app.scss',
 })
 export class App {
-  protected readonly title = signal('b0k3ts');
+  protected readonly title = signal('B0K3TS');
   protected readonly authenticated = signal<boolean>(false);
 
   protected readonly currentUrl = signal<string>('');
@@ -75,6 +75,11 @@ export class App {
     return url === '/settings' || url.startsWith('/settings/');
   }
 
+  protected isPluginsSectionOpen(): boolean {
+    const url = this.currentUrl();
+    return url === '/plugins' || url.startsWith('/plugins/');
+  }
+
   private async refreshAuth(): Promise<void> {
     const token = this.auth.getToken();
     if (!token) {
@@ -86,7 +91,7 @@ export class App {
     if (res.authenticated) {
       this.authenticated.set(true);
 
-      console.log(res)
+      console.log(res);
       const email = res.user_info?.email || 'Unknown User';
       this.globalService.updateTitle('Welcome ' + email);
 

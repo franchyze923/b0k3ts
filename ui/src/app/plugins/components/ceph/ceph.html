@@ -1,0 +1,59 @@
+<div class="ceph-page">
+  <mat-card>
+    <mat-card-title>Ceph Plugin</mat-card-title>
+    <mat-card-subtitle>Create and delete buckets</mat-card-subtitle>
+
+    @if (loading()) {
+      <mat-progress-bar mode="indeterminate" />
+    }
+
+    <div class="create-row">
+      <mat-form-field appearance="outline" class="bucket-input">
+        <mat-label>Bucket name</mat-label>
+        <input
+          matInput
+          [ngModel]="bucketName()"
+          (ngModelChange)="bucketName.set($event)"
+          placeholder="e.g. reports-2026"
+        />
+      </mat-form-field>
+
+      <button mat-flat-button color="primary" type="button" (click)="create()" [disabled]="!canSubmit()">
+        Create
+      </button>
+
+      <button mat-button type="button" (click)="refresh()" [disabled]="loading()">
+        Refresh
+      </button>
+    </div>
+  </mat-card>
+
+  @if (lastCreated()) {
+    <mat-card class="creds-card">
+      <mat-card-title>Bucket credentials</mat-card-title>
+      <mat-card-subtitle>Returned by backend after creation</mat-card-subtitle>
+
+      <pre class="creds-pre">{{ lastCreated() | json }}</pre>
+    </mat-card>
+  }
+
+  <mat-card class="list-card">
+    <mat-card-title>Buckets</mat-card-title>
+
+    @if (buckets().length === 0) {
+      <div class="empty">No buckets found.</div>
+    } @else {
+      <div class="bucket-list">
+        @for (b of buckets(); track trackByBucket($index, b)) {
+          <div class="bucket-row">
+            <div class="bucket-name">{{ b }}</div>
+
+            <button mat-button color="warn" type="button" (click)="delete(b)" [disabled]="loading()">
+              Delete
+            </button>
+          </div>
+        }
+      </div>
+    }
+  </mat-card>
+</div>

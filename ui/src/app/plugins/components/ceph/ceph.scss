@@ -1,0 +1,51 @@
+.ceph-page {
+  display: grid;
+  gap: 16px;
+}
+
+.create-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+
+.bucket-input {
+  min-width: 280px;
+  flex: 1 1 420px;
+}
+
+.list-card .empty {
+  opacity: 0.7;
+  padding: 12px 0;
+}
+
+.bucket-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.bucket-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.bucket-name {
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.creds-card .creds-pre {
+  margin: 12px 0 0;
+  padding: 12px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.2);
+  overflow: auto;
+}

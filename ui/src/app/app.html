@@ -2,7 +2,7 @@
   @if (authenticated()) {
     <mat-sidenav class="app-sidenav" mode="side" opened>
       <div class="sidenav-header">
-        <div class="brand">b0k3ts</div>
+        <div class="brand">B0K3TS</div>
         <div class="brand-sub">Bucket tools</div>
       </div>
 
@@ -27,6 +27,20 @@
             <a mat-list-item routerLink="/settings/oidc" routerLinkActive="active">
               <mat-icon matListItemIcon>vpn_key</mat-icon>
               <span matListItemTitle>OIDC</span>
+            </a>
+          </div>
+        }
+
+        <a mat-list-item routerLink="/plugins" routerLinkActive="active">
+          <mat-icon matListItemIcon>extension</mat-icon>
+          <span matListItemTitle>Plugins</span>
+        </a>
+
+        @if (isPluginsSectionOpen()) {
+          <div class="sidenav-subsection">
+            <a mat-list-item routerLink="/plugins/ceph" routerLinkActive="active">
+              <mat-icon matListItemIcon>cloud</mat-icon>
+              <span matListItemTitle>Ceph</span>
             </a>
           </div>
         }
