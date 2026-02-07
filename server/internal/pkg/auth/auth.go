@@ -175,6 +175,7 @@ func (auth *Auth) LocalAuthorize(c *gin.Context) {
 		"authenticated": true,
 		"user_info": gin.H{
 			"username": claims.Username,
+			"email":    claims.Email,
 		},
 	})
 }

@@ -121,7 +121,7 @@ func (app *App) DeleteConnection(c *gin.Context) {
 
 	// Getting User ID from JWT Token
 	//
-	userInfo := auth.TokenToUserData(c.GetHeader("Authorization"), app.OIDCConfig.ClientSecret)
+	userInfo, _ := auth.TokenToUserData(c.GetHeader("Authorization"))
 
 	if userInfo.Email == "" {
 		slog.Error("failed to get token id")
@@ -191,7 +191,7 @@ func (app *App) ListConnection(c *gin.Context) {
 
 	// Getting User ID from JWT Token
 	//
-	userInfo := auth.TokenToUserData(c.GetHeader("Authorization"), app.OIDCConfig.ClientSecret)
+	userInfo, _ := auth.TokenToUserData(c.GetHeader("Authorization"))
 
 	if userInfo.Email == "" {
 		slog.Error("failed to get token id")
@@ -212,7 +212,6 @@ func (app *App) ListConnection(c *gin.Context) {
 			c.JSON(400, gin.H{"error": err.Error()})
 			return
 		}
-		slog.Info("", bucketConfig)
 
 		authorized := false
 
@@ -245,7 +244,7 @@ func (app *App) AddConnection(c *gin.Context) {
 
 	// Getting User ID from JWT Token
 	//
-	userInfo := auth.TokenToUserData(c.GetHeader("Authorization"), app.OIDCConfig.ClientSecret)
+	userInfo, _ := auth.TokenToUserData(c.GetHeader("Authorization"))
 
 	if userInfo.Email == "" {
 		slog.Error("failed to get token id")
@@ -508,7 +507,7 @@ func authorizeAndExtract(app App, c *gin.Context, bucketName string) *BucketConf
 
 	// Getting User ID from JWT Token
 	//
-	userInfo := auth.TokenToUserData(c.GetHeader("Authorization"), app.OIDCConfig.ClientSecret)
+	userInfo, _ := auth.TokenToUserData(c.GetHeader("Authorization"))
 
 	if userInfo.Email == "" {
 		slog.Error("failed to get token id")

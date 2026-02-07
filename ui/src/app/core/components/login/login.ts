@@ -75,6 +75,8 @@ export class Login {
 
         this.state.set('authenticated');
         this.message.set('You are signed in.');
+        await this.router.navigateByUrl('/dashboard');
+
         return;
       }
 
@@ -98,6 +100,8 @@ export class Login {
     if (res.authenticated) {
       this.state.set('authenticated');
       this.message.set('You are signed in.');
+      await this.router.navigateByUrl('/dashboard');
+
     } else {
       this.state.set('error');
       this.message.set('Session not accepted. Please sign in again.');
@@ -131,7 +135,6 @@ export class Login {
       return;
     }
 
-    // TODO
     // if (!this.auth.verifyCallbackState(state)) {
     //   this.state.set('error');
     //   this.message.set('Security check failed. Please try again.');
@@ -168,5 +171,7 @@ export class Login {
 
     this.state.set('authenticated');
     this.message.set('You are signed in.');
+    await this.router.navigateByUrl('/dashboard');
+
   }
 }

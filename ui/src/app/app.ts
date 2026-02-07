@@ -11,6 +11,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatListModule } from '@angular/material/list';
 import { GlobalService } from './core/services/global';
 import { AsyncPipe } from '@angular/common';
+import { MatMenuModule } from '@angular/material/menu';
 
 @Component({
   selector: 'app-root',
@@ -24,6 +25,7 @@ import { AsyncPipe } from '@angular/common';
     MatIconModule,
     MatListModule,
     AsyncPipe,
+    MatMenuModule,
   ],
   templateUrl: './app.html',
   styleUrl: './app.scss',
@@ -61,6 +63,13 @@ export class App {
     this.theme.toggle();
   }
 
+  async logout(): Promise<void> {
+    this.auth.clearToken();
+    this.authenticated.set(false);
+    this.globalService.updateTitle(''); // optional: clear display on logout
+    await this.router.navigateByUrl('/login');
+  }
+
   protected isSettingsSectionOpen(): boolean {
     const url = this.currentUrl();
     return url === '/settings' || url.startsWith('/settings/');
@@ -76,6 +85,11 @@ export class App {
     const res = await this.auth.authenticateAny(token);
     if (res.authenticated) {
       this.authenticated.set(true);
+
+      console.log(res)
+      const email = res.user_info?.email || 'Unknown User';
+      this.globalService.updateTitle('Welcome ' + email);
+
       return;
     }
 

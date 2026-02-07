@@ -12,8 +12,6 @@
           <span matListItemTitle>Object Manager</span>
         </a>
 
-        <!-- ... existing code ... -->
-
         <a mat-list-item routerLink="/settings" routerLinkActive="active">
           <mat-icon matListItemIcon>settings</mat-icon>
           <span matListItemTitle>Settings</span>
@@ -42,10 +40,29 @@
 
       <span class="spacer"></span>
 
-      <button mat-button type="button" (click)="toggleTheme()">
-        <mat-icon aria-hidden="true">brightness_6</mat-icon>
-        <span>{{ theme.theme() === 'dark' ? 'Light mode' : 'Dark mode' }}</span>
+      <button mat-button type="button" [matMenuTriggerFor]="userMenu">
+        <mat-icon aria-hidden="true">more_vert</mat-icon>
+        <span>Menu</span>
       </button>
+
+      <mat-menu #userMenu="matMenu">
+        <button mat-menu-item type="button" disabled>
+          <mat-icon aria-hidden="true">person</mat-icon>
+          <span>{{ globalService.currentTitle | async }}</span>
+        </button>
+
+        <button mat-menu-item type="button" (click)="toggleTheme()">
+          <mat-icon aria-hidden="true">brightness_6</mat-icon>
+          <span>{{ theme.theme() === 'dark' ? 'Light mode' : 'Dark mode' }}</span>
+        </button>
+
+        @if (authenticated()) {
+          <button mat-menu-item type="button" (click)="logout()">
+            <mat-icon aria-hidden="true">logout</mat-icon>
+            <span>Logout</span>
+          </button>
+        }
+      </mat-menu>
     </mat-toolbar>
 
     <main class="content">

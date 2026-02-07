@@ -72,7 +72,7 @@ func (auth *Auth) GetConfig(c *gin.Context) {
 	if err != nil {
 		slog.Error(err.Error())
 		c.JSON(500, gin.H{"error": err.Error()})
-		os.Exit(1)
+		return
 	}
 
 	c.Data(200, "application/json", ret)

@@ -5,10 +5,10 @@ import (
 	"b0k3ts/internal/pkg/auth"
 	badgerDB "b0k3ts/internal/pkg/badger"
 	"b0k3ts/internal/pkg/buckets"
+	"encoding/json"
 	"log/slog"
 
 	"github.com/gin-gonic/gin"
-	"go.yaml.in/yaml/v4"
 )
 
 func (app *App) Serve() {
@@ -31,13 +31,11 @@ func (app *App) Serve() {
 	//
 	var oic configs.OIDC
 
-	err = yaml.Unmarshal(res, &oic)
+	err = json.Unmarshal(res, &oic)
 	if err != nil {
 		slog.Error(err.Error())
 		return
 	}
-
-	slog.Debug("Config", app.Config)
 
 	oAuth := auth.New(app.Config, oic, app.BadgerDB)
 	bucket := buckets.NewConfig(app.BadgerDB)
