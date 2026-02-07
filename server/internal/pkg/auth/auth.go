@@ -23,8 +23,9 @@ type LocalLoginResponse struct {
 }
 
 type LocalClaims struct {
-	Username string `json:"username"`
-	Email    string `json:"email"`
+	Username      string `json:"username"`
+	Email         string `json:"email"`
+	Administrator bool   `json:"administrator"`
 	jwt.StandardClaims
 }
 
@@ -51,8 +52,9 @@ func (auth *Auth) LocalLogin(c *gin.Context) {
 
 	now := time.Now().UTC()
 	claims := LocalClaims{
-		Username: rec.Username,
-		Email:    rec.Email,
+		Username:      rec.Username,
+		Email:         rec.Email,
+		Administrator: rec.Administrator,
 		StandardClaims: jwt.StandardClaims{
 			Subject:   rec.Username,
 			IssuedAt:  now.Unix(),
@@ -104,8 +106,9 @@ func (auth *Auth) LocalLoginRedirect(c *gin.Context) {
 	now := time.Now().UTC()
 
 	claims := LocalClaims{
-		Username: rec.Username,
-		Email:    rec.Email,
+		Username:      rec.Username,
+		Email:         rec.Email,
+		Administrator: rec.Administrator,
 		StandardClaims: jwt.StandardClaims{
 			Subject:   rec.Username,
 			IssuedAt:  now.Unix(),
@@ -174,8 +177,9 @@ func (auth *Auth) LocalAuthorize(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"authenticated": true,
 		"user_info": gin.H{
-			"username": claims.Username,
-			"email":    claims.Email,
+			"username":      claims.Username,
+			"email":         claims.Email,
+			"administrator": claims.Administrator,
 		},
 	})
 }

@@ -34,6 +34,7 @@ type User struct {
 	Name          string   `json:"name,omitempty"`
 	PreferredName string   `json:"preferred_name,omitempty"`
 	Groups        []string `json:"groups,omitempty"`
+	Administrator bool     `json:"administrator"`
 }
 
 type JWTData struct {
@@ -45,6 +46,7 @@ type JWTData struct {
 	Scope         string            `json:"scope"`
 	EmailVerified bool              `json:"email_verified"`
 	Groups        []string          `json:"groups"`
+	Administrator bool              `json:"administrator"`
 }
 
 type OIDCRegistrationUrl struct {
@@ -260,6 +262,13 @@ func TokenToUserData(authToken string) (User, error) {
 	// Local tokens (your code): username/email
 	localUsername := getString("username")
 	localEmail := getString("email")
+	administrator := false
+
+	if v, ok := claims["administrator"]; ok {
+		if b, ok := v.(bool); ok {
+			administrator = b
+		}
+	}
 
 	// OIDC tokens: preferred_username/email/name
 	oidcPreferred := getString("preferred_username")
@@ -282,6 +291,7 @@ func TokenToUserData(authToken string) (User, error) {
 		Name:          name,
 		PreferredName: preferred,
 		Groups:        groups,
+		Administrator: administrator,
 	}, nil
 }
 

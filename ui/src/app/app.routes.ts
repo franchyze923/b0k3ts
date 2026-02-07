@@ -5,6 +5,7 @@ import { authGuard } from './core/guards/auth-guard';
 import { Settings } from './core/components/settings/settings';
 import { BucketConnectionsSettings } from './core/components/settings/bucket-connections-settings/bucket-connections-settings';
 import { OidcSettings } from './core/components/settings/oidc-settings/oidc-settings';
+import {adminGuard} from './core/guards/admin-guard';
 
 export const routes: Routes = [
   { path: '', pathMatch: 'full', redirectTo: 'object-manager' },
@@ -17,11 +18,11 @@ export const routes: Routes = [
   {
     path: 'settings',
     component: Settings,
-    canActivate: [authGuard],
+
     children: [
       { path: '', pathMatch: 'full', redirectTo: 'buckets' },
-      { path: 'buckets', component: BucketConnectionsSettings },
-      { path: 'oidc', component: OidcSettings },
+      { path: 'buckets', component: BucketConnectionsSettings, canActivate: [authGuard]},
+      { path: 'oidc', component: OidcSettings, canActivate: [adminGuard],},
     ],
   },
 

@@ -19,13 +19,14 @@ var (
 )
 
 type UserRecord struct {
-	Username     string    `json:"username"`
-	PasswordHash string    `json:"password_hash"` // bcrypt hash, NOT plaintext
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
-	Disabled     bool      `json:"disabled"`
-	Email        string    `json:"email"`
-	Groups       []string  `json:"groups"`
+	Username      string    `json:"username"`
+	PasswordHash  string    `json:"password_hash"` // bcrypt hash, NOT plaintext
+	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
+	Disabled      bool      `json:"disabled"`
+	Email         string    `json:"email"`
+	Groups        []string  `json:"groups"`
+	Administrator bool      `json:"administrator"`
 }
 
 type Store struct {
@@ -63,7 +64,7 @@ func (s *Store) UserExists(username string) (bool, error) {
 
 // EnsureUser creates the user only if it does not exist yet.
 // Returns created=true if a new user was inserted, created=false if it already existed.
-func (s *Store) EnsureUser(username, password string) (created bool, err error) {
+func (s *Store) EnsureUser(username, password string, administrator bool) (created bool, err error) {
 	exists, err := s.UserExists(username)
 	if err != nil {
 		return false, err
@@ -71,7 +72,7 @@ func (s *Store) EnsureUser(username, password string) (created bool, err error) 
 	if exists {
 		return false, nil
 	}
-	if err := s.CreateUser(username, password); err != nil {
+	if err := s.CreateUser(username, password, administrator); err != nil {
 		if errors.Is(err, ErrUserAlreadyExists) {
 			return false, nil
 		}
@@ -82,7 +83,7 @@ func (s *Store) EnsureUser(username, password string) (created bool, err error) 
 
 // CreateUser creates (or refuses to overwrite) a local user.
 // Password is hashed with bcrypt and only the hash is stored.
-func (s *Store) CreateUser(username, password string) error {
+func (s *Store) CreateUser(username, password string, administrator bool) error {
 	username = normalizeUsername(username)
 	if username == "" {
 		return errors.New("username is required")
@@ -110,12 +111,13 @@ func (s *Store) CreateUser(username, password string) error {
 
 	now := time.Now().UTC()
 	rec := UserRecord{
-		Username:     username,
-		PasswordHash: string(hashBytes),
-		CreatedAt:    now,
-		UpdatedAt:    now,
-		Disabled:     false,
-		Email:        username + "@local",
+		Username:      username,
+		PasswordHash:  string(hashBytes),
+		CreatedAt:     now,
+		UpdatedAt:     now,
+		Disabled:      false,
+		Email:         username + "@local",
+		Administrator: administrator,
 	}
 
 	b, err := json.Marshal(rec)

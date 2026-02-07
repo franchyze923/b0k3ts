@@ -157,19 +157,22 @@ func (app *App) DeleteConnection(c *gin.Context) {
 	}
 
 	authorized := false
-
-	for _, user := range bucketConfig.AuthorizedUsers {
-		if user == userInfo.Email {
-			authorized = true
-			break
-		}
-	}
-
-	for _, group := range bucketConfig.AuthorizedGroups {
-		for _, user := range userInfo.Groups {
-			if user == group {
+	if userInfo.Administrator {
+		authorized = true
+	} else {
+		for _, user := range bucketConfig.AuthorizedUsers {
+			if user == userInfo.Email {
 				authorized = true
 				break
+			}
+		}
+
+		for _, group := range bucketConfig.AuthorizedGroups {
+			for _, user := range userInfo.Groups {
+				if user == group {
+					authorized = true
+					break
+				}
 			}
 		}
 	}
@@ -215,20 +218,25 @@ func (app *App) ListConnection(c *gin.Context) {
 
 		authorized := false
 
-		for _, user := range bucketConfig.AuthorizedUsers {
-			if user == userInfo.Email {
-				authorized = true
-				break
-			}
-		}
-
-		for _, group := range bucketConfig.AuthorizedGroups {
-			for _, user := range userInfo.Groups {
-				if user == group {
+		if userInfo.Administrator {
+			authorized = true
+		} else {
+			for _, user := range bucketConfig.AuthorizedUsers {
+				if user == userInfo.Email {
 					authorized = true
 					break
 				}
 			}
+
+			for _, group := range bucketConfig.AuthorizedGroups {
+				for _, user := range userInfo.Groups {
+					if user == group {
+						authorized = true
+						break
+					}
+				}
+			}
+
 		}
 
 		if authorized {
@@ -560,23 +568,25 @@ func authorizeAndExtract(app App, c *gin.Context, bucketName string) *BucketConf
 	}
 
 	authorized := false
-
-	for _, user := range bucketConfig.AuthorizedUsers {
-		if user == userInfo.Email {
-			authorized = true
-			break
-		}
-	}
-
-	for _, group := range bucketConfig.AuthorizedGroups {
-		for _, user := range userInfo.Groups {
-			if user == group {
+	if userInfo.Administrator {
+		authorized = true
+	} else {
+		for _, user := range bucketConfig.AuthorizedUsers {
+			if user == userInfo.Email {
 				authorized = true
 				break
 			}
 		}
-	}
 
+		for _, group := range bucketConfig.AuthorizedGroups {
+			for _, user := range userInfo.Groups {
+				if user == group {
+					authorized = true
+					break
+				}
+			}
+		}
+	}
 	if !authorized {
 		c.JSON(400, gin.H{"error": "Unauthorized"})
 		return nil
