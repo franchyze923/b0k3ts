@@ -5,6 +5,7 @@ import (
 	"b0k3ts/internal/pkg/auth"
 	badgerDB "b0k3ts/internal/pkg/badger"
 	"b0k3ts/internal/pkg/buckets"
+	"b0k3ts/internal/pkg/kubernetes"
 	"encoding/json"
 	"log/slog"
 
@@ -75,6 +76,11 @@ func (app *App) Serve() {
 			objects.POST("/download", bucket.Download)
 			objects.POST("/delete", bucket.Delete)
 			objects.POST("/list", bucket.ListObjects)
+		}
+
+		k8s := v1.Group("/kubernetes")
+		{
+			kubernetes.RegisterRoutes(k8s, app.BadgerDB)
 		}
 
 	}

@@ -19,7 +19,7 @@ export class CephBucketsService {
   constructor(private readonly http: HttpClient) {}
 
   async listBuckets(): Promise<string[]> {
-    const url = `${this.apiBase}/api/v1/buckets/list`;
+    const url = `${this.apiBase}/api/v1/kubernetes/obc/rook-ceph?mode=kubeconfig&config=dev`;
 
     // Backend might return string[] OR { buckets: string[] }
     const res = await firstValueFrom(this.http.get<unknown>(url));
