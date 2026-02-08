@@ -26,17 +26,17 @@ export const routes: Routes = [
       { path: '', pathMatch: 'full', redirectTo: 'buckets' },
       { path: 'buckets', component: BucketConnectionsSettings, canActivate: [authGuard] },
       { path: 'oidc', component: OidcSettings, canActivate: [adminGuard] },
-      { path: 'kubernetes', component: Kubernetes, canActivate: [authGuard] },
+      { path: 'kubernetes', component: Kubernetes, canActivate: [adminGuard] },
     ],
   },
 
   {
     path: 'plugins',
     component: Plugins,
-    canActivate: [authGuard],
+    canActivate: [adminGuard],
     children: [
       { path: '', pathMatch: 'full', redirectTo: 'ceph' },
-      { path: 'ceph', component: Ceph, canActivate: [authGuard] },
+      { path: 'ceph', component: Ceph, canActivate: [adminGuard] },
     ],
   },
 
