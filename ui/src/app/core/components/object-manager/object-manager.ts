@@ -10,16 +10,14 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
-import { MatTreeModule } from '@angular/material/tree';
-
-import { FlatTreeControl } from '@angular/cdk/tree';
-import { MatTreeFlatDataSource, MatTreeFlattener } from '@angular/material/tree';
+import { MatTreeModule, MatTreeNestedDataSource } from '@angular/material/tree';
 
 import { ObjectStorageService } from '../../services/object-storage';
 import { MovePrefixDialog, MovePrefixDialogResult } from '../move-prefix-dialog/move-prefix-dialog';
 import { GlobalService } from '../../services/global';
 import { BucketConfigsService } from '../../services/bucket-configs';
-import {MatInputModule} from '@angular/material/input';
+import { MatInputModule } from '@angular/material/input';
+import { firstValueFrom } from 'rxjs';
 
 type BucketObject = {
   key: string;
@@ -29,26 +27,17 @@ type BucketObject = {
 
 type TreeNode =
   | {
-  kind: 'dir';
-  name: string;
-  path: string; // unique path for the directory (no trailing slash)
-  children: TreeNode[];
-}
+      kind: 'dir';
+      name: string;
+      path: string; // unique path for the directory (no trailing slash)
+      children: TreeNode[];
+    }
   | {
-  kind: 'file';
-  name: string;
-  path: string; // full key
-  obj: BucketObject;
-};
-
-type FlatNode = {
-  kind: 'dir' | 'file';
-  name: string;
-  path: string;
-  level: number;
-  expandable: boolean;
-  obj?: BucketObject;
-};
+      kind: 'file';
+      name: string;
+      path: string; // full key
+      obj: BucketObject;
+    };
 
 @Component({
   selector: 'app-object-manager',
@@ -64,7 +53,7 @@ type FlatNode = {
     MatChipsModule,
     MatDialogModule,
     MatTreeModule,
-    MatInputModule
+    MatInputModule,
   ],
   templateUrl: './object-manager.html',
   styleUrl: './object-manager.scss',
@@ -102,41 +91,14 @@ export class ObjectManager {
     return trimmed.replace(/^\/+/, '').replace(/\/+$/, '') + '/';
   }
 
-  // ---- Tree setup (Flat tree) ----
-  private readonly treeFlattener = new MatTreeFlattener<TreeNode, FlatNode>(
-    (node: TreeNode, level: number): FlatNode => {
-      if (node.kind === 'dir') {
-        return {
-          kind: 'dir',
-          name: node.name,
-          path: node.path,
-          level,
-          expandable: node.children.length > 0,
-        };
-      }
-      return {
-        kind: 'file',
-        name: node.name,
-        path: node.path,
-        level,
-        expandable: false,
-        obj: node.obj,
-      };
-    },
-    (flatNode) => flatNode.level,
-    (flatNode) => flatNode.expandable,
-    (node) => (node.kind === 'dir' ? node.children : []),
-  );
+  readonly dataSource = new MatTreeNestedDataSource<TreeNode>();
 
-  readonly treeControl = new FlatTreeControl<FlatNode>(
-    (node) => node.level,
-    (node) => node.expandable,
-  );
+  readonly childrenAccessor = (node: TreeNode): TreeNode[] =>
+    node.kind === 'dir' ? node.children : [];
 
-  readonly dataSource = new MatTreeFlatDataSource(this.treeControl, this.treeFlattener);
-
-  readonly hasChild = (_: number, node: FlatNode) => node.expandable;
-
+  readonly isDir = (_: number, node: TreeNode) => node.kind === 'dir';
+  readonly isFile = (_: number, node: TreeNode): node is Extract<TreeNode, { kind: 'file' }> =>
+    node.kind === 'file';
   private buildTree(objects: BucketObject[]): TreeNode[] {
     // Root is an implicit folder; we return its children
     const root: { kind: 'dir'; name: string; path: string; children: TreeNode[] } = {
@@ -206,7 +168,11 @@ export class ObjectManager {
 
     const current = this.selectedBucket();
     const next =
-      current && bucketNames.includes(current) ? current : bucketNames.length > 0 ? bucketNames[0] : '';
+      current && bucketNames.includes(current)
+        ? current
+        : bucketNames.length > 0
+          ? bucketNames[0]
+          : '';
 
     this.selectedBucket.set(next);
 
@@ -217,6 +183,11 @@ export class ObjectManager {
     }
   }
 
+  async onBucketChange(bucket: string): Promise<void> {
+    this.selectedBucket.set(bucket ?? '');
+    await this.refresh();
+  }
+
   async refresh(): Promise<void> {
     const bucket = this.selectedBucket();
     if (!bucket) {
@@ -224,14 +195,21 @@ export class ObjectManager {
       return;
     }
 
-    const items = await this.storage.listObjects({ bucket });
-    this.objects.set(
-      items.map((o) => ({
-        key: o.key,
-        sizeBytes: o.size,
-        contentType: o.content_type,
-      })),
-    );
+    try {
+      const items = await this.storage.listObjects({ bucket });
+      this.objects.set(
+        items.map((o) => ({
+          key: o.key,
+          sizeBytes: o.size,
+          contentType: o.content_type,
+        })),
+      );
+    } catch (e) {
+      // Keep the UI stable even if the backend call fails
+      this.objects.set([]);
+      const msg = e instanceof Error ? e.message : 'Failed to load objects';
+      console.error(msg, e);
+    }
   }
 
   async onUploadFiles(files: FileList | null): Promise<void> {
@@ -305,7 +283,7 @@ export class ObjectManager {
       data: { sourceKey: obj.key, currentPrefix },
     });
 
-    const result = (await ref.afterClosed().toPromise()) as MovePrefixDialogResult;
+    const result = (await firstValueFrom(ref.afterClosed())) as MovePrefixDialogResult;
     if (!result) return;
 
     const destinationPrefix = result.destinationPrefix ?? '';

@@ -31,6 +31,7 @@ import { MatMenuModule } from '@angular/material/menu';
   styleUrl: './app.scss',
 })
 export class App {
+
   protected readonly title = signal('B0K3TS');
   protected readonly authenticated = signal<boolean>(false);
 
@@ -42,13 +43,14 @@ export class App {
     private readonly router: Router,
     public globalService: GlobalService,
   ) {
+
     // Ensure the theme attribute is applied on app start
     this.theme.apply(this.theme.theme());
 
-    // Initial auth check + re-check after each navigation (e.g. after OIDC callback cleans URL)
+    // Initial auth check + re-check after each navigation
     void this.refreshAuth();
 
-    // Track current URL (for sidenav subsections)
+    // Track current URL for sidenav
     this.currentUrl.set(this.router.url);
 
     this.router.events

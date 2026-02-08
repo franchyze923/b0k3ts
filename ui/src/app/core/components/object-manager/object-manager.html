@@ -9,17 +9,16 @@
       </mat-chip-set>
     </mat-card-subtitle>
   </mat-card-header>
-  <br>
+  <br />
 
   <mat-card-content>
     <div class="toolbar-row">
       <mat-form-field appearance="outline" class="bucket-select">
         <mat-label>Bucket</mat-label>
-        <mat-select
-          [ngModel]="selectedBucket()"
-          (ngModelChange)="selectedBucket.set($event); refresh()"
-        >
-          <mat-option *ngFor="let b of buckets()" [value]="b">{{ b }}</mat-option>
+        <mat-select [ngModel]="selectedBucket()" (ngModelChange)="onBucketChange($event)">
+          @for (b of buckets(); track b) {
+            <mat-option [value]="b">{{ b }}</mat-option>
+          }
         </mat-select>
       </mat-form-field>
 
@@ -32,7 +31,6 @@
           (ngModelChange)="uploadPrefix.set($event)"
         />
       </mat-form-field>
-
 
       <button mat-stroked-button type="button" (click)="refresh()">
         <mat-icon aria-hidden="true">refresh</mat-icon>
@@ -48,20 +46,15 @@
         (change)="onUploadFiles(fileInput.files); fileInput.value = ''"
       />
 
-      <button
-        mat-flat-button
-        color="primary"
-        type="button"
-        (click)="fileInput.click()"
-      >
+      <button mat-flat-button color="primary" type="button" (click)="fileInput.click()">
         <mat-icon aria-hidden="true">upload</mat-icon>
         Upload
       </button>
     </div>
 
     <div class="tree-wrap">
-      <mat-tree [dataSource]="dataSource" [treeControl]="treeControl">
-        <mat-tree-node *matTreeNodeDef="let node" matTreeNodePadding>
+      <mat-tree [dataSource]="dataSource" [childrenAccessor]="childrenAccessor">
+        <mat-tree-node *matTreeNodeDef="let node; when: isFile" matTreeNodePadding>
           <button mat-icon-button disabled></button>
 
           <mat-icon aria-hidden="true">description</mat-icon>
@@ -70,49 +63,47 @@
             <code>{{ node.name }}</code>
           </span>
 
-          <span class="node-meta" *ngIf="node.obj">
-            &nbsp;{{ formatBytes(node.obj.sizeBytes) }}
-          </span>
+          <span class="node-meta"> &nbsp;{{ formatBytes(node.obj.sizeBytes) }} </span>
 
           <span class="spacer"></span>
 
-          <button
-            mat-icon-button
-            [matMenuTriggerFor]="menu"
-            aria-label="File actions"
-            *ngIf="node.obj"
-          >
+          <button mat-icon-button [matMenuTriggerFor]="menu" aria-label="File actions">
             <mat-icon aria-hidden="true">more_vert</mat-icon>
           </button>
 
           <mat-menu #menu="matMenu">
-            <button mat-menu-item type="button" (click)="downloadObject(node.obj!)">
+            <button mat-menu-item type="button" (click)="downloadObject(node.obj)">
               <mat-icon aria-hidden="true">download</mat-icon>
               <span>Download</span>
             </button>
 
-            <button mat-menu-item type="button" (click)="moveObject(node.obj!)">
+            <button mat-menu-item type="button" (click)="moveObject(node.obj)">
               <mat-icon aria-hidden="true">drive_file_move</mat-icon>
               <span>Move</span>
             </button>
-            <button mat-menu-item type="button" (click)="deleteObject(node.obj!)">
+            <button mat-menu-item type="button" (click)="deleteObject(node.obj)">
               <mat-icon aria-hidden="true">delete</mat-icon>
               <span>Delete</span>
             </button>
           </mat-menu>
         </mat-tree-node>
 
-        <mat-tree-node *matTreeNodeDef="let node; when: hasChild" matTreeNodePadding>
-          <button mat-icon-button matTreeNodeToggle [attr.aria-label]="'Toggle ' + node.name">
-            <mat-icon aria-hidden="true">
-              {{ treeControl.isExpanded(node) ? 'expand_more' : 'chevron_right' }}
-            </mat-icon>
-          </button>
+        <mat-nested-tree-node *matTreeNodeDef="let node; when: isDir" #treeNode="matNestedTreeNode">
+          <div class="mat-tree-node" matTreeNodePadding>
+            <button mat-icon-button matTreeNodeToggle [attr.aria-label]="'Toggle ' + node.name">
+              <mat-icon aria-hidden="true">
+                {{ treeNode.isExpanded ? 'expand_more' : 'chevron_right' }}
+              </mat-icon>
+            </button>
 
-          <mat-icon aria-hidden="true">folder</mat-icon>
+            <mat-icon aria-hidden="true">folder</mat-icon>
+            <span class="node-name">{{ node.name }}</span>
+          </div>
 
-          <span class="node-name">{{ node.name }}</span>
-        </mat-tree-node>
+          <div [hidden]="!treeNode.isExpanded">
+            <ng-container matTreeNodeOutlet></ng-container>
+          </div>
+        </mat-nested-tree-node>
       </mat-tree>
     </div>
   </mat-card-content>

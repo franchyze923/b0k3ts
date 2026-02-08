@@ -4,13 +4,13 @@ import { firstValueFrom } from 'rxjs';
 
 export type ObjectApiItem = {
   key: string;
-  size: number; // backend: int64
+  size: number;
   content_type: string;
 };
 
 @Injectable({ providedIn: 'root' })
 export class ObjectStorageService {
-  private readonly apiBase = ''; // keep '' for same-origin; set if needed
+  private readonly apiBase = '';
 
   constructor(private readonly http: HttpClient) {}
 
@@ -19,15 +19,12 @@ export class ObjectStorageService {
     return await firstValueFrom(this.http.post<ObjectApiItem[]>(url, params));
   }
 
-  /**
-   * Uploads an object using multipart/form-data:
-   * - bucket: string
-   * - name: string (we use `key` as the "name" to preserve paths like `reports/2026.pdf`)
-   * - file: Blob (built from the provided bytes)
-   *
-   * Note: Do NOT set the Content-Type header manually for FormData; the browser will set it with a boundary.
-   */
-  async uploadObject(params: { bucket: string; key: string; bytes: number[] ; contentType?: string }): Promise<void> {
+  async uploadObject(params: {
+    bucket: string;
+    key: string;
+    bytes: number[];
+    contentType?: string;
+  }): Promise<void> {
     const url = `${this.apiBase}/api/v1/objects/upload`;
 
     const fileName = params.key.split('/').filter(Boolean).pop() ?? params.key;
@@ -40,20 +37,19 @@ export class ObjectStorageService {
     form.append('name', params.key);
     form.append('file', blob, fileName);
 
-    // If your backend expects an explicit field for content type, keep this:
     if (params.contentType) form.append('content_type', params.contentType);
 
     await firstValueFrom(this.http.post<void>(url, form));
   }
 
-  /**
-   * Downloads raw bytes as ArrayBuffer.
-   * If your backend returns JSON `number[]` instead of raw bytes, tell me and I’ll adjust this.
-   */
   async downloadObject(params: { bucket: string; filename: string }): Promise<Blob> {
     const url = `${this.apiBase}/api/v1/objects/download`;
     return await firstValueFrom(
-      this.http.post(url, { bucket: params.bucket, filename: params.filename }, { responseType: 'blob' }),
+      this.http.post(
+        url,
+        { bucket: params.bucket, filename: params.filename },
+        { responseType: 'blob' },
+      ),
     );
   }
 
@@ -62,7 +58,11 @@ export class ObjectStorageService {
     await firstValueFrom(this.http.post<void>(url, params));
   }
 
-  async moveObjectByPrefix(params: { bucket: string; sourceKey: string; destinationPrefix: string }): Promise<{
+  async moveObjectByPrefix(params: {
+    bucket: string;
+    sourceKey: string;
+    destinationPrefix: string;
+  }): Promise<{
     destinationKey: string;
   }> {
     const fileName = params.sourceKey.split('/').filter(Boolean).pop() ?? params.sourceKey;
@@ -73,13 +73,10 @@ export class ObjectStorageService {
 
     const destinationKey = `${normalizedPrefix}${fileName}`;
 
-    // download -> upload -> delete (uses only the allowed APIs)
     const blob = await this.downloadObject({ bucket: params.bucket, filename: params.sourceKey });
 
     const blobBytes = await blob.arrayBuffer();
     const bytes: number[] = Array.from(new Uint8Array(blobBytes));
-
-
 
     await this.uploadObject({
       bucket: params.bucket,

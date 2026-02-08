@@ -3,7 +3,7 @@
     <mat-card-title>Kubernetes</mat-card-title>
     <mat-card-subtitle>Upload a kubeconfig to the backend</mat-card-subtitle>
   </mat-card-header>
-  <br>
+  <br />
   <mat-card-content>
     <mat-form-field appearance="outline" class="full-width">
       <mat-label>Config name</mat-label>
@@ -11,14 +11,10 @@
     </mat-form-field>
 
     <div class="file-row">
-      <button mat-flat-button color="primary"  type="button" (click)="fileInput.click()">Select kubeconfig</button>
-      <input
-        #fileInput
-        type="file"
-        accept="config"
-        (change)="onFileSelected($event)"
-        hidden
-      />
+      <button mat-flat-button color="primary" type="button" (click)="fileInput.click()">
+        Select kubeconfig
+      </button>
+      <input #fileInput type="file" accept="config" (change)="onFileSelected($event)" hidden />
 
       @if (selectedFile()) {
         <div class="file-meta">
@@ -30,22 +26,41 @@
   </mat-card-content>
 
   <mat-card-actions align="end">
-    <button mat-raised-button color="primary" type="button" [disabled]="!canUpload()" (click)="upload()">
+    <button
+      mat-raised-button
+      color="primary"
+      type="button"
+      [disabled]="!canUpload()"
+      (click)="upload()"
+    >
       <mat-icon aria-hidden="true">upload</mat-icon>
       Upload
     </button>
   </mat-card-actions>
 </mat-card>
 
-<mat-card style="margin-top: 16px;">
+<mat-card style="margin-top: 16px">
   <mat-card-header>
     <mat-card-title>Kubeconfigs</mat-card-title>
     <mat-card-subtitle>Available kubeconfigs on the backend</mat-card-subtitle>
   </mat-card-header>
 
   <mat-card-content>
-    <div style="display:flex; gap:12px; align-items:center; justify-content: space-between; margin: 8px 0 12px;">
-      <button mat-stroked-button type="button" (click)="refreshKubeconfigs()" [disabled]="listLoading()">
+    <div
+      style="
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        justify-content: space-between;
+        margin: 8px 0 12px;
+      "
+    >
+      <button
+        mat-stroked-button
+        type="button"
+        (click)="refreshKubeconfigs()"
+        [disabled]="listLoading()"
+      >
         <mat-icon aria-hidden="true">refresh</mat-icon>
         Refresh
       </button>
@@ -56,16 +71,21 @@
     </div>
 
     @if (!listLoading() && kubeconfigNames().length === 0) {
-      <div style="opacity: 0.75;">No kubeconfigs found.</div>
+      <div style="opacity: 0.75">No kubeconfigs found.</div>
     } @else {
-      <table mat-table [dataSource]="kubeconfigNames()" class="mat-elevation-z1" style="width: 100%;">
+      <table
+        mat-table
+        [dataSource]="kubeconfigNames()"
+        class="mat-elevation-z1"
+        style="width: 100%"
+      >
         <ng-container matColumnDef="name">
           <th mat-header-cell *matHeaderCellDef>Name</th>
           <td mat-cell *matCellDef="let name">{{ name }}</td>
         </ng-container>
 
         <ng-container matColumnDef="actions">
-          <th mat-header-cell *matHeaderCellDef style="width: 120px;">Actions</th>
+          <th mat-header-cell *matHeaderCellDef style="width: 120px">Actions</th>
           <td mat-cell *matCellDef="let name">
             <button
               mat-button
@@ -80,7 +100,7 @@
         </ng-container>
 
         <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
-        <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
+        <tr mat-row *matRowDef="let _; columns: displayedColumns"></tr>
       </table>
     }
   </mat-card-content>

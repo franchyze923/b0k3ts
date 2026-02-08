@@ -23,7 +23,11 @@ export class BucketConfigsService {
 
   async listConnections(): Promise<BucketConfig[]> {
     const url = `${this.apiBase}/api/v1/buckets/list_connections`;
-    return await firstValueFrom(this.http.get<BucketConfig[]>(url));
+
+    const result = await firstValueFrom(this.http.get<BucketConfig[] | null>(url));
+
+    // Backend may return null -> normalize to empty list
+    return result ?? [];
   }
 
   /**

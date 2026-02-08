@@ -1,9 +1,7 @@
 <mat-card class="settings-card">
   <mat-card-header>
     <mat-card-title>Bucket Connections</mat-card-title>
-    <mat-card-subtitle>
-      Add, update, and remove bucket connection configs.
-    </mat-card-subtitle>
+    <mat-card-subtitle> Add, update, and remove bucket connection configs. </mat-card-subtitle>
   </mat-card-header>
 
   <mat-card-content>
@@ -35,7 +33,12 @@
 
       <mat-form-field appearance="outline">
         <mat-label>SecretAccessKey</mat-label>
-        <input matInput type="password" [(ngModel)]="draft().secret_access_key" placeholder="••••••••" />
+        <input
+          matInput
+          type="password"
+          [(ngModel)]="draft().secret_access_key"
+          placeholder="••••••••"
+        />
       </mat-form-field>
 
       <mat-slide-toggle [(ngModel)]="draft().secure">Secure</mat-slide-toggle>
@@ -44,12 +47,14 @@
         <mat-label>Authorized Users (emails)</mat-label>
 
         <mat-chip-grid #userChipGrid aria-label="Authorized users">
-          <mat-chip-row *ngFor="let u of draft().authorized_users" (removed)="removeAuthorizedUser(u)">
-            {{ u }}
-            <button matChipRemove type="button" aria-label="Remove user">
-              <mat-icon aria-hidden="true">cancel</mat-icon>
-            </button>
-          </mat-chip-row>
+          @for (u of draft().authorized_users; track u) {
+            <mat-chip-row (removed)="removeAuthorizedUser(u)">
+              {{ u }}
+              <button matChipRemove type="button" aria-label="Remove user">
+                <mat-icon aria-hidden="true">cancel</mat-icon>
+              </button>
+            </mat-chip-row>
+          }
         </mat-chip-grid>
 
         <input
@@ -63,8 +68,13 @@
           (ngModelChange)="userChipInput.set($event)"
         />
 
-        <mat-autocomplete #userAuto="matAutocomplete" (optionSelected)="addAuthorizedUserFromOption($event)">
-          <mat-option *ngFor="let u of filteredUserSuggestions()" [value]="u">{{ u }}</mat-option>
+        <mat-autocomplete
+          #userAuto="matAutocomplete"
+          (optionSelected)="addAuthorizedUserFromOption($event)"
+        >
+          @for (u of filteredUserSuggestions(); track u) {
+            <mat-option [value]="u">{{ u }}</mat-option>
+          }
         </mat-autocomplete>
       </mat-form-field>
 
@@ -72,12 +82,14 @@
         <mat-label>Authorized Groups</mat-label>
 
         <mat-chip-grid #groupChipGrid aria-label="Authorized groups">
-          <mat-chip-row *ngFor="let g of draft().authorized_groups" (removed)="removeAuthorizedGroup(g)">
-            {{ g }}
-            <button matChipRemove type="button" aria-label="Remove group">
-              <mat-icon aria-hidden="true">cancel</mat-icon>
-            </button>
-          </mat-chip-row>
+          @for (g of draft().authorized_groups; track g) {
+            <mat-chip-row (removed)="removeAuthorizedGroup(g)">
+              {{ g }}
+              <button matChipRemove type="button" aria-label="Remove group">
+                <mat-icon aria-hidden="true">cancel</mat-icon>
+              </button>
+            </mat-chip-row>
+          }
         </mat-chip-grid>
 
         <input
@@ -91,8 +103,13 @@
           (ngModelChange)="groupChipInput.set($event)"
         />
 
-        <mat-autocomplete #groupAuto="matAutocomplete" (optionSelected)="addAuthorizedGroupFromOption($event)">
-          <mat-option *ngFor="let g of filteredGroupSuggestions()" [value]="g">{{ g }}</mat-option>
+        <mat-autocomplete
+          #groupAuto="matAutocomplete"
+          (optionSelected)="addAuthorizedGroupFromOption($event)"
+        >
+          @for (g of filteredGroupSuggestions(); track g) {
+            <mat-option>[value]="g">{{ g }}</mat-option>
+          }
         </mat-autocomplete>
       </mat-form-field>
     </div>
@@ -103,7 +120,12 @@
         <span>{{ isEditing() ? 'Update' : 'Add' }}</span>
       </button>
 
-      <button mat-stroked-button type="button" (click)="cancel()" [disabled]="!isEditing() && !draft().bucket_id && !draft().endpoint">
+      <button
+        mat-stroked-button
+        type="button"
+        (click)="cancel()"
+        [disabled]="!isEditing() && !draft().bucket_id && !draft().endpoint"
+      >
         <mat-icon aria-hidden="true">close</mat-icon>
         <span>Cancel</span>
       </button>
@@ -148,18 +170,28 @@
         <ng-container matColumnDef="actions">
           <th mat-header-cell *matHeaderCellDef></th>
           <td mat-cell *matCellDef="let row" class="row-actions">
-            <button mat-icon-button type="button" (click)="startEdit(row)" aria-label="Edit bucket config">
+            <button
+              mat-icon-button
+              type="button"
+              (click)="startEdit(row)"
+              aria-label="Edit bucket config"
+            >
               <mat-icon aria-hidden="true">edit</mat-icon>
             </button>
 
-            <button mat-icon-button type="button" (click)="delete(row.bucket_id)" aria-label="Delete bucket config">
+            <button
+              mat-icon-button
+              type="button"
+              (click)="delete(row.bucket_id)"
+              aria-label="Delete bucket config"
+            >
               <mat-icon aria-hidden="true">delete</mat-icon>
             </button>
           </td>
         </ng-container>
 
         <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
-        <tr mat-row *matRowDef="let row; columns: displayedColumns"></tr>
+        <tr mat-row *matRowDef="let _; columns: displayedColumns"></tr>
       </table>
     </div>
   </mat-card-content>

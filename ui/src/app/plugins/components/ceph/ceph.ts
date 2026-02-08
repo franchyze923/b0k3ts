@@ -11,7 +11,12 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatSelectModule } from '@angular/material/select';
 import { MatTableModule } from '@angular/material/table';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
-import { CephBucketCredentials, CephBucketsService, CephBucketRef, KubernetesCommMode } from '../../services/cephbuckets';
+import {
+  CephBucketCredentials,
+  CephBucketsService,
+  CephBucketRef,
+  KubernetesCommMode,
+} from '../../services/cephbuckets';
 import { JsonPipe } from '@angular/common';
 import { CephCredsDialogComponent } from '../cephcredssnack/cephcredssnack';
 import { KubernetesKubeconfigsService } from '../../../core/services/kuberneteskubeconfigs';
@@ -36,12 +41,11 @@ import { KubernetesKubeconfigsService } from '../../../core/services/kubernetesk
   styleUrl: './ceph.scss',
 })
 export class Ceph {
-  // OBC (Kubernetes) fields
-  readonly obcName = signal<string>(''); // metadata.name
-  readonly bucketName = signal<string>(''); // spec.bucketName
-  readonly objectBucketName = signal<string>(''); // spec.objectBucketName (optional; auto-filled if empty)
-  readonly storageClassName = signal<string>(''); // spec.storageClassName
-  readonly bucketProvisionerLabel = signal<string>('rook-ceph.ceph.rook.io-bucket'); // metadata.labels.bucket-provisioner
+  readonly obcName = signal<string>('');
+  readonly bucketName = signal<string>('');
+  readonly objectBucketName = signal<string>('');
+  readonly storageClassName = signal<string>('');
+  readonly bucketProvisionerLabel = signal<string>('rook-ceph.ceph.rook.io-bucket');
 
   readonly loading = signal<boolean>(false);
 
@@ -57,7 +61,11 @@ export class Ceph {
 
   private kubeconfigsLoadPromise: Promise<void> | null = null;
 
-  readonly displayedColumns: ReadonlyArray<'obc' | 'bucket_name' | 'actions'> = ['obc', 'bucket_name', 'actions'];
+  readonly displayedColumns: ReadonlyArray<'obc' | 'bucket_name' | 'actions'> = [
+    'obc',
+    'bucket_name',
+    'actions',
+  ];
 
   readonly needsKubeconfigName = computed(() => this.commMode() === 'kubeconfig');
 
@@ -80,7 +88,6 @@ export class Ceph {
   }
 
   private async init(): Promise<void> {
-    // Ensure kubeconfig list is loaded (and default selected) BEFORE first buckets query
     if (this.commMode() === 'kubeconfig') {
       await this.refreshKubeconfigs();
     }
@@ -96,8 +103,6 @@ export class Ceph {
         const names = await this.kubeconfigs.listKubeconfigs();
         this.kubeconfigNames.set(names);
 
-        // Per request: if list has 2+ items, choose the first as default.
-        // (Also do the same for a single item so the value is never empty.)
         if (names.length > 0) {
           this.kubeconfigName.set(names[0]);
         }
@@ -105,7 +110,6 @@ export class Ceph {
         const msg = e instanceof Error ? e.message : 'Failed to load kubeconfigs';
         this.snack.open(msg, 'Dismiss', { duration: 4000 });
         this.kubeconfigNames.set([]);
-        // keep kubeconfigName() as-is (user might type manually)
       } finally {
         this.kubeconfigsLoading.set(false);
         this.kubeconfigsLoadPromise = null;
@@ -121,12 +125,13 @@ export class Ceph {
     const bucket = this.bucketName().trim();
 
     const objectBucket =
-      this.objectBucketName().trim().length > 0 ? this.objectBucketName().trim() : `obc-${ns}-${obc}`;
+      this.objectBucketName().trim().length > 0
+        ? this.objectBucketName().trim()
+        : `obc-${ns}-${obc}`;
 
     const sc = this.storageClassName().trim();
     const prov = this.bucketProvisionerLabel().trim();
 
-    // Keep it explicit and backend-friendly (no fancy YAML features)
     return [
       `apiVersion: objectbucket.io/v1alpha1`,
       `kind: ObjectBucketClaim`,
@@ -151,7 +156,6 @@ export class Ceph {
       return;
     }
 
-    // Wait for kubeconfigs to load before hitting buckets endpoint (kubeconfig mode).
     if (this.commMode() === 'kubeconfig') {
       await this.refreshKubeconfigs();
     }
@@ -192,7 +196,9 @@ export class Ceph {
         yaml,
       );
 
-      this.snack.open(`OBC "${this.obcName().trim()}" applied in namespace "${ns}"`, 'Dismiss', { duration: 3500 });
+      this.snack.open(`OBC "${this.obcName().trim()}" applied in namespace "${ns}"`, 'Dismiss', {
+        duration: 3500,
+      });
 
       await this.refresh();
     } catch (e) {
@@ -277,5 +283,5 @@ export class Ceph {
     }
   }
 
-  trackByBucket = (_: number, b: CephBucketRef) => `${b.bucket_name}::${b.obc}`;
+  _ = (_: number, b: CephBucketRef) => `${b.bucket_name}::${b.obc}`;
 }

@@ -8,14 +8,14 @@ export type OidcConfig = {
   failRedirectUrl?: string;
   passRedirectUrl?: string;
   providerUrl?: string;
-  timeout?: number; // uint32 in backend; use number in TS
+  timeout?: number;
   jwtSecret?: string;
   redirectUrl?: string;
 };
 
 @Injectable({ providedIn: 'root' })
 export class OidcConfigService {
-  private readonly apiBase = ''; // keep '' for same-origin; set if needed
+  private readonly apiBase = '';
 
   constructor(private readonly http: HttpClient) {}
 

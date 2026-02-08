@@ -12,7 +12,6 @@ type UiState = 'idle' | 'redirecting' | 'processing-callback' | 'authenticated' 
   styleUrl: './login.scss',
 })
 export class Login {
-
   protected readonly state = signal<UiState>('idle');
   protected readonly message = signal<string>('Sign in with your organization account.');
   protected readonly registrationUrl = signal<string | null>(null);
@@ -101,7 +100,6 @@ export class Login {
       this.state.set('authenticated');
       this.message.set('You are signed in.');
       await this.router.navigateByUrl('/dashboard');
-
     } else {
       this.state.set('error');
       this.message.set('Session not accepted. Please sign in again.');
@@ -112,7 +110,6 @@ export class Login {
   private async handleCallbackIfPresent(): Promise<void> {
     const qp = this.route.snapshot.queryParamMap;
     const token = qp.get('token');
-    const state = qp.get('state');
     const error = qp.get('error');
 
     if (!token && !error) {
@@ -134,13 +131,6 @@ export class Login {
       this.auth.clearToken();
       return;
     }
-
-    // if (!this.auth.verifyCallbackState(state)) {
-    //   this.state.set('error');
-    //   this.message.set('Security check failed. Please try again.');
-    //   this.auth.clearToken();
-    //   return;
-    // }
 
     if (!token) {
       this.state.set('error');
@@ -172,6 +162,5 @@ export class Login {
     this.state.set('authenticated');
     this.message.set('You are signed in.');
     await this.router.navigateByUrl('/dashboard');
-
   }
 }

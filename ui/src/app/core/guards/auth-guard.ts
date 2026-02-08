@@ -3,7 +3,7 @@ import { CanActivateFn, Router } from '@angular/router';
 import { Auth } from '../services/auth';
 import { GlobalService } from '../services/global';
 
-export const authGuard: CanActivateFn = async (route, state) => {
+export const authGuard: CanActivateFn = async (_, state) => {
   const globalService = inject(GlobalService);
 
   const auth = inject(Auth);

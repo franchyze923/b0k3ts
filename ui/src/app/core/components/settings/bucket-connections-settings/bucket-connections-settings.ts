@@ -11,7 +11,10 @@ import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatTableModule } from '@angular/material/table';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatChipsModule, MatChipInputEvent } from '@angular/material/chips';
-import { MatAutocompleteModule, MatAutocompleteSelectedEvent } from '@angular/material/autocomplete';
+import {
+  MatAutocompleteModule,
+  MatAutocompleteSelectedEvent,
+} from '@angular/material/autocomplete';
 
 import { GlobalService } from '../../../services/global';
 import { BucketConfig, BucketConfigsService } from '../../../services/bucket-configs';
@@ -58,7 +61,14 @@ export class BucketConnectionsSettings implements OnInit {
   });
 
   readonly isEditing = computed(() => this.editingBucketId() !== null);
-  readonly displayedColumns = ['bucket_id', 'endpoint', 'bucket_name', 'location', 'secure', 'actions'] as const;
+  readonly displayedColumns = [
+    'bucket_id',
+    'endpoint',
+    'bucket_name',
+    'location',
+    'secure',
+    'actions',
+  ] as const;
 
   // Chips / autocomplete state
   readonly userChipInput = signal<string>('');
@@ -89,10 +99,11 @@ export class BucketConnectionsSettings implements OnInit {
   });
 
   constructor() {
-    this.global.updateTitle('Settings · Bucket Connections');
+    // this.global.updateTitle('Settings · Bucket Connections');
   }
 
   async ngOnInit(): Promise<void> {
+    queueMicrotask(() => this.global.updateTitle('Settings · Bucket Connections'));
     await this.refreshBuckets();
   }
 
@@ -234,7 +245,9 @@ export class BucketConnectionsSettings implements OnInit {
       await this.refreshBuckets();
 
       const editingId = this.editingBucketId();
-      this.snack.open(editingId ? 'Bucket config updated' : 'Bucket config added', 'Dismiss', { duration: 2500 });
+      this.snack.open(editingId ? 'Bucket config updated' : 'Bucket config added', 'Dismiss', {
+        duration: 2500,
+      });
 
       this.startAdd();
     } catch (e) {

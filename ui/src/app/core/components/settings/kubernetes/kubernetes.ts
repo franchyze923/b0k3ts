@@ -50,8 +50,7 @@ export class Kubernetes {
   readonly canUpload = computed(() => {
     if (this.saving()) return false;
     if (!this.selectedFile()) return false;
-    if (this.name().trim().length === 0) return false;
-    return true;
+    return this.name().trim().length !== 0;
   });
 
   constructor() {

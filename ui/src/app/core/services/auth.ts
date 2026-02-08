@@ -1,12 +1,10 @@
-import {Injectable, ViewChild, ElementRef} from '@angular/core';
+import { Injectable } from '@angular/core';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 
 export type AuthenticateResponse = {
   authenticated: boolean;
-  user_info: User | null
-  // You can extend this with user/profile fields if your backend returns them.
-  // user?: { id: string; email?: string; name?: string };
+  user_info: User | null;
 };
 
 export type LocalLoginRequest = {
@@ -23,37 +21,28 @@ type StartLoginResponse = {
 type LocalLoginResponse =
   | StartLoginResponse
   | {
-  authenticated?: boolean;
-  token?: string;
-  username?: string;
-};
+      authenticated?: boolean;
+      token?: string;
+      username?: string;
+    };
 
 @Injectable({
   providedIn: 'root',
 })
 export class Auth {
-
-  private readonly apiBase = ''; // keep '' for same-origin; set e.g. 'https://api.example.com' if needed
+  private readonly apiBase = '';
 
   private readonly storageTokenKey = 'oidc.token';
   private readonly storageStateKey = 'oidc.state';
 
   constructor(private readonly http: HttpClient) {}
 
-
-  /**
-   * Generates a cryptographically-strong token (base64url) for OIDC `state` (and/or `nonce`).
-   */
   generateToken(byteLength = 32): string {
     const bytes = new Uint8Array(byteLength);
     crypto.getRandomValues(bytes);
     return this.base64UrlEncode(bytes);
   }
 
-  /**
-   * Starts login by requesting the backend OIDC login endpoint.
-   * Backend returns JSON with a registration URL which should be displayed to the user as a link.
-   */
   async startLogin(): Promise<{ registrationUrl: string }> {
     const redirectUri = new URL('/oidc/callback', window.location.origin).toString();
 
@@ -84,11 +73,6 @@ export class Auth {
     return { registrationUrl };
   }
 
-  /**
-   * Starts Local login (username/password) and returns a redirect URL, same pattern as OIDC.
-   * Sends credentials in JSON body (matching your LocalLoginRequest struct).
-   * Sends redirect_uri + state as query params (keeps request body exactly {username,password}).
-   */
   async startLocalLogin(
     req: LocalLoginRequest,
   ): Promise<{ registrationUrl?: string; token?: string }> {
@@ -131,19 +115,12 @@ export class Auth {
     return { registrationUrl };
   }
 
-  /**
-   * Tries to authenticate token against local first, then OIDC.
-   * (Useful when the UI may hold either type of token.)
-   */
   async authenticateAny(token?: string): Promise<AuthenticateResponse> {
     const local = await this.authenticateLocal(token);
     if (local.authenticated) return local;
     return await this.authenticate(token);
   }
 
-  /**
-   * Accepts token from redirect callback and stores it (session-scoped by default).
-   */
   setToken(token: string): void {
     sessionStorage.setItem(this.storageTokenKey, token);
   }
@@ -157,19 +134,6 @@ export class Auth {
     sessionStorage.removeItem(this.storageStateKey);
   }
 
-  /**
-   * Verifies that the callback `state` matches what we issued before redirecting.
-   */
-  verifyCallbackState(receivedState: string | null): boolean {
-    const expected = sessionStorage.getItem(this.storageStateKey);
-    return !!receivedState && !!expected && receivedState === expected;
-  }
-
-  /**
-   * Validates auth by calling backend `/api/v1/oidc/authenticate`.
-   * Assumes backend accepts Authorization: Bearer <token>.
-   * If your backend expects JSON { token }, tell me and I’ll adjust.
-   */
   async authenticate(token?: string): Promise<AuthenticateResponse> {
     const t = token ?? this.getToken();
     if (!t) return { authenticated: false, user_info: null };
@@ -184,10 +148,6 @@ export class Auth {
     }
   }
 
-  /**
-   * Validates auth by calling backend `/api/v1/local/authenticate`.
-   * Uses the same Authorization header approach as OIDC.
-   */
   async authenticateLocal(token?: string): Promise<AuthenticateResponse> {
     const t = token ?? this.getToken();
     if (!t) return { authenticated: false, user_info: null };
@@ -215,6 +175,6 @@ export type User = {
   id: string;
   email: string;
   name: string;
-  preferred_username: string
+  preferred_username: string;
   groups: string[];
 };
