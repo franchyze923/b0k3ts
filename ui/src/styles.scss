@@ -79,10 +79,31 @@ $dark-theme: mat.define-theme(
 :root {
   @include mat.core();
   @include mat.all-component-themes($light-theme);
+
+
+
+  @include mat.button-base((
+    filled-container-shape: 5px,
+
+  ));
+  @include mat.list-base((
+    list-item-container-shape: 5px, // global list-item radius
+
+  ))
+
 }
 
 :root[data-theme='dark'] {
   @include mat.all-component-colors($dark-theme);
+  @include mat.button-base((
+    filled-container-shape: 5px,
+
+  ));
+
+  @include mat.list-base((
+    list-item-container-shape: 5px, // global list-item radius
+
+  ))
 }
 
 html,
@@ -96,3 +117,4 @@ body {
   color: var(--text);
   font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
 }
+

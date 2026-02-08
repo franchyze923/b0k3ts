@@ -11,7 +11,7 @@ func InitializeDatabase() *badgerDB.DB {
 
 	// Starting Badger
 	//
-	db, err := badgerDB.Open(badgerDB.DefaultOptions("/tmp/badger"))
+	db, err := badgerDB.Open(badgerDB.DefaultOptions("/opt/b0k3ts/data"))
 	if err != nil {
 		log.Fatal(err)
 	}

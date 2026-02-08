@@ -1,0 +1,38 @@
+<mat-card>
+  <mat-card-header>
+    <mat-card-title>Kubernetes</mat-card-title>
+    <mat-card-subtitle>Upload a kubeconfig to the backend</mat-card-subtitle>
+  </mat-card-header>
+  <br>
+  <mat-card-content>
+    <mat-form-field appearance="outline" class="full-width">
+      <mat-label>Config name</mat-label>
+      <input matInput [(ngModel)]="name" placeholder="dev" />
+    </mat-form-field>
+
+    <div class="file-row">
+      <button mat-flat-button color="primary"  type="button" (click)="fileInput.click()">Select kubeconfig</button>
+      <input
+        #fileInput
+        type="file"
+        accept="config"
+        (change)="onFileSelected($event)"
+        hidden
+      />
+
+      @if (selectedFile()) {
+        <div class="file-meta">
+          <span><strong>Selected:</strong> {{ selectedFile()!.name }}</span>
+          <button mat-button type="button" (click)="clearFile(fileInput)">Clear</button>
+        </div>
+      }
+    </div>
+  </mat-card-content>
+
+  <mat-card-actions align="end">
+    <button mat-raised-button color="primary" type="button" [disabled]="!canUpload()" (click)="upload()">
+      <mat-icon aria-hidden="true">upload</mat-icon>
+      Upload
+    </button>
+  </mat-card-actions>
+</mat-card>

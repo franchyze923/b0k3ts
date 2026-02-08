@@ -1,25 +1,3 @@
 host: 0.0.0.0                             
 port: 8080
 jwtSecret: xFt5dYEAaRDF0YkwZS23mZmv5CKcjaoC
-
-#oidc:
-#  clientId: buckets
-#  clientSecret: n7kqs4LjAzysP2LNpPOsNLZj6d41vOAh
-#  passRedirectUrl: http://localhost:4200/login?token=
-#  providerUrl: https://keycloak.cyberneticks.com/realms/master
-#  redirectUrl: http://localhost:8080/api/v1/oidc/callback
-#  timeout: 172800
-#  jwtSec: xFt5dYEAaRDF0YkwZS23mZmv5CKcjaoC
-
-
-apiVersion: objectbucket.io/v1alpha1
-kind: ObjectBucketClaim
-metadata:
-  labels:
-    bucket-provisioner: rook-ceph.ceph.rook.io-bucket
-  name: my-first-bucket
-  namespace: rook-ceph
-spec:
-  bucketName: photos-and-videos
-  objectBucketName: obc-rook-ceph-my-first-bucket
-  storageClassName: rook-ceph-bucket
