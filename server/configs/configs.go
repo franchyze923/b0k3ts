@@ -4,7 +4,6 @@ type ServerConfig struct {
 	Host      string `yaml:"host,omitempty"`
 	Port      string `yaml:"port,omitempty"`
 	JWTSecret string `yaml:"jwtSecret,omitempty"`
-	//OIDC OIDC   `json:"oidc"`
 }
 
 type OIDC struct {

@@ -1,0 +1,8 @@
+b0k3ts has been installed.
+
+Service:
+  {{ include "b0k3ts.fullname" . }}
+
+Ports:
+  UI:     {{ .Values.service.ports.ui }}
+  Server: {{ .Values.service.ports.server }}

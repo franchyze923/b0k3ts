@@ -8,6 +8,8 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
+import { MatTableModule } from '@angular/material/table';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 
 import { GlobalService } from '../../../services/global';
 import { KubernetesKubeconfigsService } from '../../../services/kuberneteskubeconfigs';
@@ -23,6 +25,8 @@ import { KubernetesKubeconfigsService } from '../../../services/kuberneteskubeco
     MatFormFieldModule,
     MatInputModule,
     MatSnackBarModule,
+    MatTableModule,
+    MatProgressSpinnerModule,
   ],
   templateUrl: './kubernetes.html',
   styleUrl: './kubernetes.scss',
@@ -37,6 +41,12 @@ export class Kubernetes {
   readonly name = signal<string>('dev');
   readonly selectedFile = signal<File | null>(null);
 
+  readonly kubeconfigNames = signal<string[]>([]);
+  readonly listLoading = signal(false);
+  readonly deletingName = signal<string | null>(null);
+
+  readonly displayedColumns = ['name', 'actions'] as const;
+
   readonly canUpload = computed(() => {
     if (this.saving()) return false;
     if (!this.selectedFile()) return false;
@@ -46,6 +56,7 @@ export class Kubernetes {
 
   constructor() {
     this.global.updateTitle('Settings · Kubernetes');
+    void this.refreshKubeconfigs();
   }
 
   onFileSelected(e: Event): void {
@@ -57,6 +68,41 @@ export class Kubernetes {
   clearFile(fileInput: HTMLInputElement): void {
     fileInput.value = '';
     this.selectedFile.set(null);
+  }
+
+  async refreshKubeconfigs(): Promise<void> {
+    try {
+      this.listLoading.set(true);
+      const names = await this.kubeconfigs.listKubeconfigs();
+      this.kubeconfigNames.set(names);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Failed to load kubeconfigs';
+      this.snack.open(msg, 'Dismiss', { duration: 5000 });
+    } finally {
+      this.listLoading.set(false);
+    }
+  }
+
+  async deleteKubeconfig(name: string): Promise<void> {
+    if (this.deletingName()) return;
+
+    const ok = window.confirm(`Delete kubeconfig "${name}"?`);
+    if (!ok) return;
+
+    try {
+      this.deletingName.set(name);
+      await this.kubeconfigs.deleteKubeconfig(name);
+      this.snack.open(`Kubeconfig "${name}" deleted`, 'Dismiss', { duration: 2500 });
+
+      // Optimistic update + safety refresh (in case backend normalized names)
+      this.kubeconfigNames.update((xs) => xs.filter((x) => x !== name));
+      await this.refreshKubeconfigs();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Delete failed';
+      this.snack.open(msg, 'Dismiss', { duration: 5000 });
+    } finally {
+      this.deletingName.set(null);
+    }
   }
 
   async upload(): Promise<void> {
@@ -73,6 +119,7 @@ export class Kubernetes {
       this.saving.set(true);
       await this.kubeconfigs.uploadKubeconfig(name, file!);
       this.snack.open(`Kubeconfig "${name}" uploaded`, 'Dismiss', { duration: 2500 });
+      await this.refreshKubeconfigs();
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Upload failed';
       this.snack.open(msg, 'Dismiss', { duration: 5000 });

@@ -17,7 +17,6 @@ export const authGuard: CanActivateFn = async (route, state) => {
   }
 
   const res = await auth.authenticateAny(token);
-  console.log(res)
   if (res.authenticated) {
     const email = res.user_info?.email || 'Unknown User';
     globalService.updateTitle('Welcome ' + email);

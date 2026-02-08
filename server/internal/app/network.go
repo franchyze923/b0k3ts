@@ -15,7 +15,17 @@ import (
 func (app *App) Serve() {
 
 	// Create a Gin router
-	r := gin.Default()
+	r := gin.New()
+
+	r.Use(gin.Recovery())
+	r.Use(gin.LoggerWithConfig(gin.LoggerConfig{
+		SkipPaths: []string{"/api/v1/healthz"},
+	}))
+
+	if err := r.SetTrustedProxies(nil); err != nil {
+		slog.Error("failed to set trusted proxies", "err", err)
+		return
+	}
 
 	//
 	var oic configs.OIDC

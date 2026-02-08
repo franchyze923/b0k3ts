@@ -103,16 +103,6 @@ export class CephBucketsService {
     );
   }
 
-  // async createBucket(bucketName: string): Promise<CephBucketCredentials> {
-  //   const url = `${this.apiBase}/api/v1/buckets/create`;
-  //
-  //   return await firstValueFrom(
-  //     this.http.post<CephBucketCredentials>(url, {
-  //       bucket_name: bucketName,
-  //     }),
-  //   );
-  // }
-
   async deleteObjectBucketClaim(opts: ListBucketsOptions, obc: string): Promise<void> {
     const ns = encodeURIComponent(opts.namespace.trim());
     const obcName = encodeURIComponent(obc.trim());
@@ -130,13 +120,4 @@ export class CephBucketsService {
     await firstValueFrom(this.http.delete<void>(url));
   }
 
-  // async deleteBucket(bucketName: string): Promise<void> {
-  //   const url = `${this.apiBase}/api/v1/buckets/delete`;
-  //
-  //   await firstValueFrom(
-  //     this.http.post<void>(url, {
-  //       bucket_name: bucketName,
-  //     }),
-  //   );
-  // }
 }

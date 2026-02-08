@@ -2,7 +2,7 @@
   <mat-card class="settings-card-header">
     <mat-card-title>Ceph Plugin</mat-card-title>
     <mat-card-subtitle>Apply ObjectBucketClaim (OBC) YAML and manage buckets</mat-card-subtitle>
-<br>
+    <br>
     @if (loading()) {
       <mat-progress-bar mode="indeterminate" />
     }
@@ -29,13 +29,37 @@
       @if (needsKubeconfigName()) {
         <mat-form-field appearance="outline" class="kubeconfig-input">
           <mat-label>Kubeconfig name</mat-label>
-          <input
-            matInput
-            [ngModel]="kubeconfigName()"
-            (ngModelChange)="kubeconfigName.set($event)"
-            placeholder="e.g. dev"
-          />
+
+          @if (kubeconfigNames().length > 0) {
+            <mat-select
+              [ngModel]="kubeconfigName()"
+              (ngModelChange)="kubeconfigName.set($event)"
+              [disabled]="kubeconfigsLoading()"
+            >
+              @for (name of kubeconfigNames(); track name) {
+                <mat-option [value]="name">{{ name }}</mat-option>
+              }
+            </mat-select>
+          } @else {
+            <input
+              matInput
+              [ngModel]="kubeconfigName()"
+              (ngModelChange)="kubeconfigName.set($event)"
+              placeholder="e.g. dev"
+            />
+          }
         </mat-form-field>
+
+        <button
+          mat-icon-button
+          type="button"
+          (click)="refreshKubeconfigs()"
+          [disabled]="kubeconfigsLoading()"
+          aria-label="Refresh kubeconfigs"
+          title="Refresh kubeconfigs"
+        >
+          <mat-icon aria-hidden="true">refresh</mat-icon>
+        </button>
       }
 
       <button mat-button type="button" (click)="refresh()" [disabled]="loading()">

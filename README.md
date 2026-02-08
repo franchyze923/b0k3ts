@@ -1,5 +1,7 @@
 # B0K3TS
 
+
+
 **B0K3TS** is a lightweight UI-first service for managing **S3-compatible buckets** and **Rook/Ceph ObjectBucketClaims (OBCs)**—built because the Rook/Ceph toolbox doesn’t ship with a friendly bucket management UI.
 
 It lets you:
@@ -282,6 +284,7 @@ curl \
 
 ## Notes / Gotchas
 
+- The helm chart creates a service account. You can add the `serviceAccountName` to the rook-ceph-object-bucket ClusterRoleBinding.
 - **Do not commit real credentials** to Git. Use placeholders in examples and supply secrets via your runtime configuration.
 - If you’re running the server **outside** the cluster, use the **kubeconfig** mode.
 - For object upload, the `name` field is the **object key**, so `folder1/file.txt` is perfectly valid.

@@ -91,7 +91,6 @@ export class App {
     if (res.authenticated) {
       this.authenticated.set(true);
 
-      console.log(res);
       const email = res.user_info?.email || 'Unknown User';
       this.globalService.updateTitle('Welcome ' + email);
 

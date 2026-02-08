@@ -14,6 +14,7 @@ import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { CephBucketCredentials, CephBucketsService, CephBucketRef, KubernetesCommMode } from '../../services/cephbuckets';
 import { JsonPipe } from '@angular/common';
 import { CephCredsDialogComponent } from '../cephcredssnack/cephcredssnack';
+import { KubernetesKubeconfigsService } from '../../../core/services/kuberneteskubeconfigs';
 
 @Component({
   selector: 'app-ceph',
@@ -49,7 +50,12 @@ export class Ceph {
 
   readonly namespace = signal<string>('rook-ceph');
   readonly commMode = signal<KubernetesCommMode>('kubeconfig');
-  readonly kubeconfigName = signal<string>('dev');
+  readonly kubeconfigName = signal<string>('');
+
+  readonly kubeconfigNames = signal<string[]>([]);
+  readonly kubeconfigsLoading = signal<boolean>(false);
+
+  private kubeconfigsLoadPromise: Promise<void> | null = null;
 
   readonly displayedColumns: ReadonlyArray<'obc' | 'bucket_name' | 'actions'> = ['obc', 'bucket_name', 'actions'];
 
@@ -68,8 +74,45 @@ export class Ceph {
     private readonly ceph: CephBucketsService,
     private readonly snack: MatSnackBar,
     private readonly dialog: MatDialog,
+    private readonly kubeconfigs: KubernetesKubeconfigsService,
   ) {
-    void this.refresh();
+    void this.init();
+  }
+
+  private async init(): Promise<void> {
+    // Ensure kubeconfig list is loaded (and default selected) BEFORE first buckets query
+    if (this.commMode() === 'kubeconfig') {
+      await this.refreshKubeconfigs();
+    }
+    await this.refresh();
+  }
+
+  async refreshKubeconfigs(): Promise<void> {
+    if (this.kubeconfigsLoadPromise) return await this.kubeconfigsLoadPromise;
+
+    this.kubeconfigsLoadPromise = (async () => {
+      try {
+        this.kubeconfigsLoading.set(true);
+        const names = await this.kubeconfigs.listKubeconfigs();
+        this.kubeconfigNames.set(names);
+
+        // Per request: if list has 2+ items, choose the first as default.
+        // (Also do the same for a single item so the value is never empty.)
+        if (names.length > 0) {
+          this.kubeconfigName.set(names[0]);
+        }
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : 'Failed to load kubeconfigs';
+        this.snack.open(msg, 'Dismiss', { duration: 4000 });
+        this.kubeconfigNames.set([]);
+        // keep kubeconfigName() as-is (user might type manually)
+      } finally {
+        this.kubeconfigsLoading.set(false);
+        this.kubeconfigsLoadPromise = null;
+      }
+    })();
+
+    return await this.kubeconfigsLoadPromise;
   }
 
   private buildObcYaml(): string {
@@ -106,6 +149,11 @@ export class Ceph {
       this.snack.open('Namespace is required', 'Dismiss', { duration: 3000 });
       this.buckets.set([]);
       return;
+    }
+
+    // Wait for kubeconfigs to load before hitting buckets endpoint (kubeconfig mode).
+    if (this.commMode() === 'kubeconfig') {
+      await this.refreshKubeconfigs();
     }
 
     this.loading.set(true);
@@ -145,11 +193,6 @@ export class Ceph {
       );
 
       this.snack.open(`OBC "${this.obcName().trim()}" applied in namespace "${ns}"`, 'Dismiss', { duration: 3500 });
-
-      // Optional: clear only the names if you want to quickly create multiple
-      // this.obcName.set('');
-      // this.bucketName.set('');
-      // this.objectBucketName.set('');
 
       await this.refresh();
     } catch (e) {
@@ -233,5 +276,6 @@ export class Ceph {
       this.loading.set(false);
     }
   }
+
   trackByBucket = (_: number, b: CephBucketRef) => `${b.bucket_name}::${b.obc}`;
 }
