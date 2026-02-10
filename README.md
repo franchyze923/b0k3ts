@@ -295,5 +295,4 @@ curl \
 
 - For now, when connecting to buckets, the id and bucket name must be the same values.
 
-## License
 
