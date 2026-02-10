@@ -31,9 +31,9 @@ import { MatMenuModule } from '@angular/material/menu';
   styleUrl: './app.scss',
 })
 export class App {
-
   protected readonly title = signal('B0K3TS');
   protected readonly authenticated = signal<boolean>(false);
+  protected readonly isAdmin = signal<boolean>(false);
 
   protected readonly currentUrl = signal<string>('');
 
@@ -43,7 +43,6 @@ export class App {
     private readonly router: Router,
     public globalService: GlobalService,
   ) {
-
     // Ensure the theme attribute is applied on app start
     this.theme.apply(this.theme.theme());
 
@@ -68,6 +67,7 @@ export class App {
   async logout(): Promise<void> {
     this.auth.clearToken();
     this.authenticated.set(false);
+    this.isAdmin.set(false);
     this.globalService.updateTitle(''); // optional: clear display on logout
     await this.router.navigateByUrl('/login');
   }
@@ -86,12 +86,14 @@ export class App {
     const token = this.auth.getToken();
     if (!token) {
       this.authenticated.set(false);
+      this.isAdmin.set(false);
       return;
     }
 
     const res = await this.auth.authenticateAny(token);
     if (res.authenticated) {
       this.authenticated.set(true);
+      this.isAdmin.set(this.isAdminUser(res.user_info));
 
       const email = res.user_info?.email || 'Unknown User';
       this.globalService.updateTitle('Welcome ' + email);
@@ -101,5 +103,19 @@ export class App {
 
     this.auth.clearToken();
     this.authenticated.set(false);
+    this.isAdmin.set(false);
+  }
+
+  private isAdminUser(userInfo: any): boolean {
+    const administrator = userInfo?.administrator === true;
+
+    const groups: unknown[] = Array.isArray(userInfo?.groups) ? userInfo.groups : [];
+    const roles: unknown[] = Array.isArray(userInfo?.roles) ? userInfo.roles : [];
+
+    const inAdminsGroup =
+      groups.some((g) => (typeof g === 'string' ? g : (g as any)?.name) === '/Admins') ||
+      roles.some((r) => r === 'Admins');
+
+    return administrator || inAdminsGroup;
   }
 }

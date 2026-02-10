@@ -11,6 +11,7 @@ export type OidcConfig = {
   timeout?: number;
   jwtSecret?: string;
   redirectUrl?: string;
+  adminGroup?: string;
 };
 
 @Injectable({ providedIn: 'root' })

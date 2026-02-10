@@ -9,6 +9,7 @@ import { Kubernetes } from './core/components/settings/kubernetes/kubernetes';
 import { adminGuard } from './core/guards/admin-guard';
 import { Plugins } from './plugins/components/plugins/plugins';
 import { Ceph } from './plugins/components/ceph/ceph';
+import { Users } from './core/components/settings/users/users';
 
 export const routes: Routes = [
   { path: '', pathMatch: 'full', redirectTo: 'object-manager' },
@@ -27,6 +28,7 @@ export const routes: Routes = [
       { path: 'buckets', component: BucketConnectionsSettings, canActivate: [authGuard] },
       { path: 'oidc', component: OidcSettings, canActivate: [adminGuard] },
       { path: 'kubernetes', component: Kubernetes, canActivate: [adminGuard] },
+      { path: 'users', component: Users, canActivate: [adminGuard] },
     ],
   },
 

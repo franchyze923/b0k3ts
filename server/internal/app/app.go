@@ -37,7 +37,7 @@ func (app *App) Preflight() {
 	// Create default user
 	store := auth.NewStore(app.BadgerDB)
 
-	created, err := store.EnsureUser("root", "root", true)
+	created, err := store.EnsureUser("root", "b0k3ts", true)
 	if err != nil {
 		slog.Error(err.Error())
 		return

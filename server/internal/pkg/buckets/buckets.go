@@ -60,7 +60,7 @@ type Buckets struct {
 
 type App struct {
 	DB         *badger.DB
-	OIDCConfig *configs.OIDC
+	OIDCConfig configs.OIDC
 }
 
 type Object struct {
@@ -69,8 +69,8 @@ type Object struct {
 	ContentType string `json:"content_type"`
 }
 
-func NewConfig(db *badger.DB) *App {
-	return &App{DB: db}
+func NewConfig(db *badger.DB, oidcConfig configs.OIDC) *App {
+	return &App{DB: db, OIDCConfig: oidcConfig}
 }
 
 func scanByPrefix(db *badger.DB, prefixStr string) [][]byte {
@@ -167,8 +167,13 @@ func (app *App) DeleteConnection(c *gin.Context) {
 			}
 		}
 
-		for _, group := range bucketConfig.AuthorizedGroups {
-			for _, user := range userInfo.Groups {
+		for _, user := range userInfo.Groups {
+			if user == app.OIDCConfig.AdminGroup {
+				authorized = true
+				break
+			}
+			for _, group := range bucketConfig.AuthorizedGroups {
+
 				if user == group {
 					authorized = true
 					break
@@ -221,15 +226,21 @@ func (app *App) ListConnection(c *gin.Context) {
 		if userInfo.Administrator {
 			authorized = true
 		} else {
+
 			for _, user := range bucketConfig.AuthorizedUsers {
 				if user == userInfo.Email {
+
 					authorized = true
 					break
 				}
 			}
 
-			for _, group := range bucketConfig.AuthorizedGroups {
-				for _, user := range userInfo.Groups {
+			for _, user := range userInfo.Groups {
+				if user == app.OIDCConfig.AdminGroup {
+					authorized = true
+					break
+				}
+				for _, group := range bucketConfig.AuthorizedGroups {
 					if user == group {
 						authorized = true
 						break
@@ -578,8 +589,13 @@ func authorizeAndExtract(app App, c *gin.Context, bucketName string) *BucketConf
 			}
 		}
 
-		for _, group := range bucketConfig.AuthorizedGroups {
-			for _, user := range userInfo.Groups {
+		for _, user := range userInfo.Groups {
+			if user == app.OIDCConfig.AdminGroup {
+				authorized = true
+				break
+			}
+			for _, group := range bucketConfig.AuthorizedGroups {
+
 				if user == group {
 					authorized = true
 					break

@@ -250,3 +250,43 @@ func normalizeUsername(u string) string {
 func isKeyNotFound(err error) bool {
 	return errors.Is(err, badger.ErrKeyNotFound)
 }
+
+// UpdatePassword sets a new password for the given user (without requiring the old password).
+// Useful for admin resets or "forgot password" flows.
+func (s *Store) UpdatePassword(username, newPassword string) error {
+	username = normalizeUsername(username)
+	if username == "" {
+		return errors.New("username is required")
+	}
+	if newPassword == "" {
+		return errors.New("new password is required")
+	}
+
+	rec, err := s.GetUser(username)
+	if err != nil {
+		return err
+	}
+	if rec.Disabled {
+		return ErrInvalidUsernameOrPassword
+	}
+
+	cost := s.BcryptCost
+	if cost == 0 {
+		cost = bcrypt.DefaultCost
+	}
+
+	hashBytes, err := bcrypt.GenerateFromPassword([]byte(newPassword), cost)
+	if err != nil {
+		return fmt.Errorf("hash new password: %w", err)
+	}
+
+	rec.PasswordHash = string(hashBytes)
+	rec.UpdatedAt = time.Now().UTC()
+
+	b, err := json.Marshal(rec)
+	if err != nil {
+		return fmt.Errorf("marshal updated user record: %w", err)
+	}
+
+	return badgerKV.PutKV(s.DB, userKey(rec.Username), b)
+}

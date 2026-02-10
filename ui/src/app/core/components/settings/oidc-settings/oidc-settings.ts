@@ -44,6 +44,7 @@ export class OidcSettings implements OnInit {
     timeout: 0,
     jwtSecret: '',
     redirectUrl: '',
+    adminGroup: '',
   });
 
   readonly busy = computed(() => this.loading() || this.saving());
@@ -72,6 +73,7 @@ export class OidcSettings implements OnInit {
         timeout: typeof cfg.timeout === 'number' ? cfg.timeout : 0,
         jwtSecret: cfg.jwtSecret ?? '',
         redirectUrl: cfg.redirectUrl ?? '',
+        adminGroup: cfg.adminGroup ?? '',
       });
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Failed to load OIDC config';
@@ -94,6 +96,7 @@ export class OidcSettings implements OnInit {
       await this.oidc.configure({
         ...d,
         timeout: d.timeout ? Number(d.timeout) : 0,
+        adminGroup: String(d.adminGroup ?? '').trim(),
       });
       this.snack.open('OIDC configured', 'Dismiss', { duration: 2500 });
 
@@ -108,7 +111,12 @@ export class OidcSettings implements OnInit {
   }
 
   private validate(d: OidcConfig): string | null {
-    const required: Array<keyof OidcConfig> = ['providerUrl', 'clientId', 'clientSecret', 'redirectUrl'];
+    const required: Array<keyof OidcConfig> = [
+      'providerUrl',
+      'clientId',
+      'clientSecret',
+      'redirectUrl',
+    ];
 
     for (const k of required) {
       if (String(d[k] ?? '').trim().length === 0) return `Missing required field: ${String(k)}`;

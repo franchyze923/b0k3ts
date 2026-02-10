@@ -15,4 +15,5 @@ type OIDC struct {
 	Timeout         uint32 `json:"timeout,omitempty"`
 	JWTSecret       string `json:"jwtSecret,omitempty"`
 	RedirectUrl     string `json:"redirectUrl,omitempty"`
+	AdminGroup      string `json:"adminGroup,omitempty"`
 }

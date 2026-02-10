@@ -1,9 +1,7 @@
 <mat-card class="settings-card">
   <mat-card-header>
     <mat-card-title>OIDC</mat-card-title>
-    <mat-card-subtitle>
-      Configure OpenID Connect provider settings.
-    </mat-card-subtitle>
+    <mat-card-subtitle> Configure OpenID Connect provider settings. </mat-card-subtitle>
   </mat-card-header>
 
   <mat-card-content>
@@ -15,51 +13,110 @@
 
       <span class="spacer"></span>
 
-      <button mat-flat-button color="primary" type="button" (click)="save()" [disabled]="!canSave()">
+      <button
+        mat-flat-button
+        color="primary"
+        type="button"
+        (click)="save()"
+        [disabled]="!canSave()"
+      >
         <mat-icon aria-hidden="true">save</mat-icon>
         <span>{{ saving() ? 'Saving…' : 'Save' }}</span>
       </button>
     </div>
-    <br>
+    <br />
     <div class="grid">
       <mat-form-field appearance="outline">
         <mat-label>Provider URL</mat-label>
-        <input matInput [(ngModel)]="draft().providerUrl" [disabled]="busy()" placeholder="https://issuer.example.com" />
+        <input
+          matInput
+          [(ngModel)]="draft().providerUrl"
+          [disabled]="busy()"
+          placeholder="https://issuer.example.com"
+        />
       </mat-form-field>
 
       <mat-form-field appearance="outline">
         <mat-label>Redirect URL</mat-label>
-        <input matInput [(ngModel)]="draft().redirectUrl" [disabled]="busy()" placeholder="https://app.example.com/oidc/callback" />
+        <input
+          matInput
+          [(ngModel)]="draft().redirectUrl"
+          [disabled]="busy()"
+          placeholder="http://[url]/api/v1/oidc/callback"
+        />
       </mat-form-field>
 
       <mat-form-field appearance="outline">
         <mat-label>Client ID</mat-label>
-        <input matInput [(ngModel)]="draft().clientId" [disabled]="busy()" placeholder="your-client-id" />
+        <input
+          matInput
+          [(ngModel)]="draft().clientId"
+          [disabled]="busy()"
+          placeholder="your-client-id"
+        />
       </mat-form-field>
 
       <mat-form-field appearance="outline">
         <mat-label>Client Secret</mat-label>
-        <input matInput type="password" [(ngModel)]="draft().clientSecret" [disabled]="busy()" placeholder="••••••••" />
+        <input
+          matInput
+          type="password"
+          [(ngModel)]="draft().clientSecret"
+          [disabled]="busy()"
+          placeholder="••••••••"
+        />
       </mat-form-field>
 
       <mat-form-field appearance="outline">
         <mat-label>JWT Secret</mat-label>
-        <input matInput type="password" [(ngModel)]="draft().jwtSecret" [disabled]="busy()" placeholder="••••••••" />
+        <input
+          matInput
+          type="password"
+          [(ngModel)]="draft().jwtSecret"
+          [disabled]="busy()"
+          placeholder="••••••••"
+        />
       </mat-form-field>
 
       <mat-form-field appearance="outline">
         <mat-label>Timeout (seconds)</mat-label>
-        <input matInput type="number" [(ngModel)]="draft().timeout" [disabled]="busy()" placeholder="0" />
+        <input
+          matInput
+          type="number"
+          [(ngModel)]="draft().timeout"
+          [disabled]="busy()"
+          placeholder="0"
+        />
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>Admin group</mat-label>
+        <input
+          matInput
+          [(ngModel)]="draft().adminGroup"
+          [disabled]="busy()"
+          placeholder="/Admins"
+        />
       </mat-form-field>
 
       <mat-form-field appearance="outline">
         <mat-label>Pass Redirect URL</mat-label>
-        <input matInput [(ngModel)]="draft().passRedirectUrl" [disabled]="busy()" placeholder="https://app.example.com/" />
+        <input
+          matInput
+          [(ngModel)]="draft().passRedirectUrl"
+          [disabled]="busy()"
+          placeholder="http://[url]/login?token="
+        />
       </mat-form-field>
 
       <mat-form-field appearance="outline">
         <mat-label>Fail Redirect URL</mat-label>
-        <input matInput [(ngModel)]="draft().failRedirectUrl" [disabled]="busy()" placeholder="https://app.example.com/login" />
+        <input
+          matInput
+          [(ngModel)]="draft().failRedirectUrl"
+          [disabled]="busy()"
+          placeholder="http://[url]/login/failed"
+        />
       </mat-form-field>
     </div>
   </mat-card-content>

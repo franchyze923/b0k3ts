@@ -51,7 +51,8 @@ func (app *App) Serve() {
 	}
 
 	oAuth := auth.New(app.Config, oic, app.BadgerDB)
-	bucket := buckets.NewConfig(app.BadgerDB)
+	bucket := buckets.NewConfig(app.BadgerDB, oic)
+	localStore := auth.NewStore(app.BadgerDB)
 
 	v1 := r.Group("/api/v1")
 	{
@@ -69,10 +70,11 @@ func (app *App) Serve() {
 		local := v1.Group("/local")
 		{
 			local.POST("/login", oAuth.LocalLogin)
-
 			local.POST("/login_redirect", oAuth.LocalLoginRedirect)
-
 			local.POST("/authenticate", oAuth.LocalAuthorize)
+
+			// Local user management & self-service endpoints:
+			RegisterLocalUserRoutes(local, localStore)
 		}
 
 		bkt := v1.Group("/buckets")

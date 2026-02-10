@@ -105,6 +105,30 @@ func (auth *Auth) Configure(c *gin.Context) {
 		os.Exit(1)
 	}
 
+	var oic configs.OIDC
+
+	res, err := badgerDB.PullKV(auth.BadgerDB, "oidc-config")
+	if err != nil {
+		if err.Error() == "Key not found" {
+			slog.Info("OIDC Not Configured")
+		} else {
+			slog.Error(err.Error())
+			return
+		}
+		//return
+
+	}
+
+	if err == nil {
+		err = json.Unmarshal(res, &oic)
+		if err != nil {
+			slog.Error(err.Error())
+			return
+		}
+	}
+
+	auth.OIDCConfig = oic
+
 	c.JSON(200, gin.H{"message": "oidc config saved successfully"})
 
 }

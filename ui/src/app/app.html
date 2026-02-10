@@ -24,30 +24,39 @@
               <span matListItemTitle>Bucket Connections</span>
             </a>
 
-            <a mat-list-item routerLink="/settings/oidc" routerLinkActive="active">
-              <mat-icon matListItemIcon>vpn_key</mat-icon>
-              <span matListItemTitle>OIDC</span>
-            </a>
+            @if (isAdmin()) {
+              <a mat-list-item routerLink="/settings/oidc" routerLinkActive="active">
+                <mat-icon matListItemIcon>vpn_key</mat-icon>
+                <span matListItemTitle>OIDC</span>
+              </a>
 
-            <a mat-list-item routerLink="/settings/kubernetes" routerLinkActive="active">
-              <mat-icon matListItemIcon>dns</mat-icon>
-              <span matListItemTitle>Kubernetes</span>
-            </a>
+              <a mat-list-item routerLink="/settings/kubernetes" routerLinkActive="active">
+                <mat-icon matListItemIcon>dns</mat-icon>
+                <span matListItemTitle>Kubernetes</span>
+              </a>
+
+              <a mat-list-item routerLink="/settings/users" routerLinkActive="active">
+                <mat-icon matListItemIcon>manage_accounts</mat-icon>
+                <span matListItemTitle>Users</span>
+              </a>
+            }
           </div>
         }
 
-        <a mat-list-item routerLink="/plugins" routerLinkActive="active">
-          <mat-icon matListItemIcon>extension</mat-icon>
-          <span matListItemTitle>Plugins</span>
-        </a>
+        @if (isAdmin()) {
+          <a mat-list-item routerLink="/plugins" routerLinkActive="active">
+            <mat-icon matListItemIcon>extension</mat-icon>
+            <span matListItemTitle>Plugins</span>
+          </a>
 
-        @if (isPluginsSectionOpen()) {
-          <div class="sidenav-subsection">
-            <a mat-list-item routerLink="/plugins/ceph" routerLinkActive="active">
-              <mat-icon matListItemIcon>cloud</mat-icon>
-              <span matListItemTitle>Ceph</span>
-            </a>
-          </div>
+          @if (isPluginsSectionOpen()) {
+            <div class="sidenav-subsection">
+              <a mat-list-item routerLink="/plugins/ceph" routerLinkActive="active">
+                <mat-icon matListItemIcon>cloud</mat-icon>
+                <span matListItemTitle>Ceph</span>
+              </a>
+            </div>
+          }
         }
       </mat-nav-list>
     </mat-sidenav>
