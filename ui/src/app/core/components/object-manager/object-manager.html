@@ -26,7 +26,7 @@
         <mat-label>Upload prefix</mat-label>
         <input
           matInput
-          placeholder="e.g. reports/2026/"
+          placeholder="e.g. reports/2026/ (optional)"
           [ngModel]="uploadPrefix()"
           (ngModelChange)="uploadPrefix.set($event)"
         />
@@ -37,7 +37,6 @@
         Refresh
       </button>
 
-      <!-- Reliable upload control -->
       <input
         #fileInput
         type="file"
@@ -46,65 +45,164 @@
         (change)="onUploadFiles(fileInput.files); fileInput.value = ''"
       />
 
-      <button mat-flat-button color="primary" type="button" (click)="fileInput.click()">
+      <button
+        mat-flat-button
+        color="primary"
+        type="button"
+        (click)="fileInput.click()"
+        [disabled]="isUploading()"
+      >
         <mat-icon aria-hidden="true">upload</mat-icon>
         Upload
       </button>
     </div>
 
-    <div class="tree-wrap">
-      <mat-tree [dataSource]="dataSource" [childrenAccessor]="childrenAccessor">
-        <mat-tree-node *matTreeNodeDef="let node; when: isFile" matTreeNodePadding>
-          <button mat-icon-button disabled></button>
+    @if (uploadTasks().length > 0) {
+      <div class="upload-panel" aria-label="Upload progress">
+        <div class="upload-panel-header">
+          <div class="upload-title">Uploads</div>
 
-          <mat-icon aria-hidden="true">description</mat-icon>
+          <div class="upload-actions">
+            <button mat-stroked-button type="button" (click)="clearCompletedUploads()">
+              Clear completed
+            </button>
+            <button mat-stroked-button type="button" (click)="clearAllUploads()">Clear all</button>
+          </div>
+        </div>
 
-          <span class="node-name">
-            <code>{{ node.name }}</code>
-          </span>
+        <div class="upload-list">
+          @for (t of uploadTasks(); track t.id) {
+            <div class="upload-item" [class.is-error]="t.status === 'error'">
+              <div class="upload-topline">
+                <div class="upload-name">{{ t.fileName }}</div>
+                <div class="upload-meta">
+                  @if (t.status === 'uploading') {
+                    <span>
+                      {{ t.percent.toFixed(1) }}% · {{ formatBytes(t.uploadedBytes) }} /
+                      {{ formatBytes(t.totalBytes) }}
+                      @if (t.partNumber && t.partCount) {
+                        · part {{ t.partNumber }}/{{ t.partCount }}
+                      }
+                    </span>
+                  } @else if (t.status === 'done') {
+                    <span>Done · {{ formatBytes(t.totalBytes) }}</span>
+                  } @else if (t.status === 'queued') {
+                    <span>Queued</span>
+                  } @else {
+                    <span>Error</span>
+                  }
+                </div>
+              </div>
 
-          <span class="node-meta"> &nbsp;{{ formatBytes(node.obj.sizeBytes) }} </span>
+              <mat-progress-bar
+                mode="determinate"
+                [value]="t.percent"
+                [color]="t.status === 'error' ? 'warn' : 'primary'"
+              ></mat-progress-bar>
 
-          <span class="spacer"></span>
+              @if (t.status === 'error' && t.errorMessage) {
+                <div class="upload-error">{{ t.errorMessage }}</div>
+              }
+            </div>
+          }
+        </div>
+      </div>
+    }
 
-          <button mat-icon-button [matMenuTriggerFor]="menu" aria-label="File actions">
-            <mat-icon aria-hidden="true">more_vert</mat-icon>
+    <div class="explorer">
+      <!-- Right: details view -->
+      <div class="pane pane-right" aria-label="Files">
+        <div class="address-bar">
+          <button
+            mat-icon-button
+            type="button"
+            (click)="goUp()"
+            [disabled]="!currentDir()"
+            aria-label="Up"
+          >
+            <mat-icon aria-hidden="true">arrow_upward</mat-icon>
           </button>
 
-          <mat-menu #menu="matMenu">
-            <button mat-menu-item type="button" (click)="downloadObject(node.obj)">
-              <mat-icon aria-hidden="true">download</mat-icon>
-              <span>Download</span>
-            </button>
+          <button mat-button type="button" (click)="goToDir('')">This bucket</button>
 
-            <button mat-menu-item type="button" (click)="moveObject(node.obj)">
-              <mat-icon aria-hidden="true">drive_file_move</mat-icon>
-              <span>Move</span>
-            </button>
-            <button mat-menu-item type="button" (click)="deleteObject(node.obj)">
-              <mat-icon aria-hidden="true">delete</mat-icon>
-              <span>Delete</span>
-            </button>
-          </mat-menu>
-        </mat-tree-node>
+          @for (c of breadcrumbs(); track c.path) {
+            <span class="crumb-sep">/</span>
+            <button mat-button type="button" (click)="goToDir(c.path)">{{ c.label }}</button>
+          }
+        </div>
 
-        <mat-nested-tree-node *matTreeNodeDef="let node; when: isDir" #treeNode="matNestedTreeNode">
-          <div class="mat-tree-node" matTreeNodePadding>
-            <button mat-icon-button matTreeNodeToggle [attr.aria-label]="'Toggle ' + node.name">
-              <mat-icon aria-hidden="true">
-                {{ treeNode.isExpanded ? 'expand_more' : 'chevron_right' }}
-              </mat-icon>
-            </button>
+        <div class="details-wrap">
+          <table
+            mat-table
+            [dataSource]="explorerRows()"
+            class="details-table"
+            aria-label="Folder contents"
+          >
+            <!-- Name -->
+            <ng-container matColumnDef="name">
+              <th mat-header-cell *matHeaderCellDef>Name</th>
+              <td mat-cell *matCellDef="let row" (dblclick)="onRowActivate(row)" class="name-cell">
+                <mat-icon aria-hidden="true" class="row-icon">
+                  {{ row.kind === 'dir' ? 'folder' : 'description' }}
+                </mat-icon>
+                <span class="row-name">{{ row.name }}</span>
+              </td>
+            </ng-container>
 
-            <mat-icon aria-hidden="true">folder</mat-icon>
-            <span class="node-name">{{ node.name }}</span>
-          </div>
+            <!-- Size -->
+            <ng-container matColumnDef="size">
+              <th mat-header-cell *matHeaderCellDef class="col-size">Size</th>
+              <td mat-cell *matCellDef="let row" class="col-size">
+                @if (row.kind === 'file') {
+                  {{ formatBytes(row.obj.sizeBytes) }}
+                } @else {
+                  —
+                }
+              </td>
+            </ng-container>
 
-          <div [hidden]="!treeNode.isExpanded">
-            <ng-container matTreeNodeOutlet></ng-container>
-          </div>
-        </mat-nested-tree-node>
-      </mat-tree>
+            <!-- Type -->
+            <ng-container matColumnDef="type">
+              <th mat-header-cell *matHeaderCellDef>Type</th>
+              <td mat-cell *matCellDef="let row">
+                {{ fileTypeLabel(row) }}
+              </td>
+            </ng-container>
+
+            <!-- Actions -->
+            <ng-container matColumnDef="actions">
+              <th mat-header-cell *matHeaderCellDef class="col-actions"></th>
+              <td mat-cell *matCellDef="let row" class="col-actions">
+                @if (row.kind === 'file') {
+                  <button mat-icon-button [matMenuTriggerFor]="menu" aria-label="File actions">
+                    <mat-icon aria-hidden="true">more_vert</mat-icon>
+                  </button>
+
+                  <mat-menu #menu="matMenu">
+                    <button mat-menu-item type="button" (click)="downloadObject(row.obj)">
+                      <mat-icon aria-hidden="true">download</mat-icon>
+                      <span>Download</span>
+                    </button>
+
+                    <button mat-menu-item type="button" (click)="moveObject(row.obj)">
+                      <mat-icon aria-hidden="true">drive_file_move</mat-icon>
+                      <span>Move</span>
+                    </button>
+
+                    <button mat-menu-item type="button" (click)="deleteObject(row.obj)">
+                      <mat-icon aria-hidden="true">delete</mat-icon>
+                      <span>Delete</span>
+                    </button>
+                  </mat-menu>
+                }
+              </td>
+            </ng-container>
+
+            <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+            <tr mat-row *matRowDef="let row; columns: displayedColumns"></tr>
+          </table>
+        </div>
+      </div>
     </div>
   </mat-card-content>
 </mat-card>

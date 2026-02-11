@@ -14,6 +14,71 @@
   margin-bottom: 12px;
 }
 
+.upload-panel {
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 8px;
+  padding: 10px;
+  margin: 8px 0 12px;
+  background: var(--mat-sys-surface, #fff);
+}
+
+.upload-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.upload-title {
+  font-weight: 600;
+}
+
+.upload-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.upload-list {
+  display: grid;
+  gap: 10px;
+}
+
+.upload-item {
+  display: grid;
+  gap: 6px;
+}
+
+.upload-topline {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.upload-name {
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.upload-meta {
+  opacity: 0.75;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.upload-error {
+  color: #b00020;
+  font-size: 12px;
+}
+
+.upload-item.is-error .upload-meta {
+  opacity: 1;
+}
+
 .bucket-select {
   min-width: 260px;
   flex: 1;
@@ -28,6 +93,7 @@
   border: 1px solid var(--border);
   border-radius: 12px;
   overflow: hidden;
+
 }
 
 .key {
@@ -38,4 +104,86 @@
 .actions {
   width: 1%;
   white-space: nowrap;
+}
+
+.explorer {
+  display: grid;
+
+  //grid-template-columns: 320px 1fr;
+  gap: 12px;
+  align-items: stretch;
+}
+
+.pane {
+
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 8px;
+  min-height: 520px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  background-color:  rgba(0, 0, 0, 0.12);
+}
+
+.pane-title {
+  padding: 10px 12px;
+  font-weight: 600;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.tree-wrap {
+
+  padding: 6px 0;
+  overflow: auto;
+}
+
+.folder-row {
+  
+  cursor: default;
+}
+
+.address-bar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 8px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  overflow: auto;
+}
+
+.crumb-sep {
+  opacity: 0.6;
+  padding: 0 2px;
+}
+
+.details-wrap {
+  overflow: auto;
+  flex: 1;
+}
+
+.details-table {
+  width: 100%;
+}
+
+.name-cell {
+  user-select: none;
+}
+
+.row-icon {
+  vertical-align: middle;
+  margin-right: 8px;
+}
+
+.row-name {
+  vertical-align: middle;
+}
+
+.col-size {
+  width: 140px;
+  text-align: right;
+}
+
+.col-actions {
+  width: 56px;
+  text-align: right;
 }

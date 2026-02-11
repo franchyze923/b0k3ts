@@ -86,10 +86,16 @@ func (app *App) Serve() {
 
 		objects := v1.Group("/objects")
 		{
-			objects.POST("/upload", bucket.Upload)
+			// objects.POST("/upload", bucket.Upload) // removed: multipart only
 			objects.POST("/download", bucket.Download)
 			objects.POST("/delete", bucket.Delete)
 			objects.POST("/list", bucket.ListObjects)
+
+			// Direct Multipart Upload:
+			objects.POST("/multipart/initiate", bucket.MultipartInitiate)
+			objects.POST("/multipart/presign_part", bucket.MultipartPresignPart)
+			objects.POST("/multipart/complete", bucket.MultipartComplete)
+			objects.POST("/multipart/abort", bucket.MultipartAbort)
 		}
 
 		k8s := v1.Group("/kubernetes")

@@ -8,12 +8,18 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"log/slog"
 	"net/http"
+	"net/url"
+	"sort"
+	"strconv"
+	"time"
 
 	"github.com/dgraph-io/badger/v4"
 	"github.com/gin-gonic/gin"
 	"github.com/minio/minio-go/v7"
+	"github.com/minio/minio-go/v7/pkg/cors"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 	"github.com/samber/lo"
 )
@@ -33,6 +39,258 @@ type BucketConfig struct {
 type BucketDeleteRequest struct {
 	BucketId string `json:"bucket_id"`
 }
+
+// --- Direct Multipart Upload (server presigns, client uploads parts directly) ---
+
+type MultipartInitiateRequest struct {
+	Bucket      string `json:"bucket"`       // bucket connection id (same meaning as your other endpoints)
+	Key         string `json:"key"`          // object key/path in the bucket
+	ContentType string `json:"content_type"` // optional; defaults to application/octet-stream
+}
+
+type MultipartInitiateResponse struct {
+	Bucket   string `json:"bucket"`
+	Key      string `json:"key"`
+	UploadID string `json:"upload_id"`
+}
+
+type MultipartPresignPartRequest struct {
+	Bucket         string `json:"bucket"`
+	Key            string `json:"key"`
+	UploadID       string `json:"upload_id"`
+	PartNumber     int    `json:"part_number"`     // 1..10000
+	ExpiresSeconds int64  `json:"expires_seconds"` // optional; default 900
+}
+
+type MultipartPresignPartResponse struct {
+	URL string `json:"url"`
+}
+
+type MultipartCompletedPart struct {
+	PartNumber int    `json:"part_number"`
+	ETag       string `json:"etag"`
+}
+
+type MultipartCompleteRequest struct {
+	Bucket   string                   `json:"bucket"`
+	Key      string                   `json:"key"`
+	UploadID string                   `json:"upload_id"`
+	Parts    []MultipartCompletedPart `json:"parts"`
+}
+
+type MultipartAbortRequest struct {
+	Bucket   string `json:"bucket"`
+	Key      string `json:"key"`
+	UploadID string `json:"upload_id"`
+}
+
+func (app *App) MultipartInitiate(c *gin.Context) {
+
+	ctx := context.Background()
+
+	var req MultipartInitiateRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		slog.Error("failed to bind json", "err", err)
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+	if req.Key == "" {
+		c.JSON(400, gin.H{"error": "key is required"})
+		return
+	}
+
+	bucketConfig := authorizeAndExtract(*app, c, req.Bucket)
+	if bucketConfig == nil {
+		return
+	}
+
+	core, err := ConnectCore(*bucketConfig)
+	if err != nil {
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+
+	slog.Info("setting cors for bucket", "bucket", bucketConfig.BucketName)
+
+	cfg := cors.Config{
+		CORSRules: []cors.Rule{
+			{
+				AllowedOrigin: []string{"*"},
+				AllowedMethod: []string{"PUT", "POST", "GET", "HEAD", "DELETE"},
+				AllowedHeader: []string{"*"},
+				ExposeHeader:  []string{"ETag"},
+				MaxAgeSeconds: 3600,
+			},
+		},
+	}
+
+	if err := core.SetBucketCors(ctx, bucketConfig.BucketName, &cfg); err != nil {
+		log.Fatal(err)
+	}
+
+	contentType := req.ContentType
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+
+	uploadID, err := core.NewMultipartUpload(ctx, bucketConfig.BucketName, req.Key, minio.PutObjectOptions{
+		ContentType: contentType,
+	})
+	if err != nil {
+		slog.Error("failed to initiate multipart upload", "err", err)
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(200, MultipartInitiateResponse{
+		Bucket:   req.Bucket,
+		Key:      req.Key,
+		UploadID: uploadID,
+	})
+}
+
+func (app *App) MultipartPresignPart(c *gin.Context) {
+	var req MultipartPresignPartRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		slog.Error("failed to bind json", "err", err)
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+	if req.Key == "" || req.UploadID == "" {
+		c.JSON(400, gin.H{"error": "key and upload_id are required"})
+		return
+	}
+	if req.PartNumber < 1 || req.PartNumber > 10000 {
+		c.JSON(400, gin.H{"error": "part_number must be between 1 and 10000"})
+		return
+	}
+
+	bucketConfig := authorizeAndExtract(*app, c, req.Bucket)
+	if bucketConfig == nil {
+		return
+	}
+
+	mio, err := Connect(*bucketConfig)
+	if err != nil {
+		slog.Error(err.Error())
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+
+	expires := req.ExpiresSeconds
+	if expires <= 0 {
+		expires = 900
+	}
+	if expires > 7*24*3600 {
+		c.JSON(400, gin.H{"error": "expires_seconds too large"})
+		return
+	}
+
+	ctx := context.Background()
+
+	q := make(url.Values, 2)
+	q.Set("partNumber", strconv.Itoa(req.PartNumber))
+	q.Set("uploadId", req.UploadID)
+
+	u, err := mio.Presign(ctx, http.MethodPut, bucketConfig.BucketName, req.Key, time.Duration(expires)*time.Second, q)
+	if err != nil {
+		slog.Error("failed to presign part url", "err", err)
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(200, MultipartPresignPartResponse{URL: u.String()})
+}
+
+func (app *App) MultipartComplete(c *gin.Context) {
+	var req MultipartCompleteRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		slog.Error("failed to bind json", "err", err)
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+	if req.Key == "" || req.UploadID == "" {
+		c.JSON(400, gin.H{"error": "key and upload_id are required"})
+		return
+	}
+	if len(req.Parts) == 0 {
+		c.JSON(400, gin.H{"error": "parts is required"})
+		return
+	}
+
+	bucketConfig := authorizeAndExtract(*app, c, req.Bucket)
+	if bucketConfig == nil {
+		return
+	}
+
+	core, err := ConnectCore(*bucketConfig)
+	if err != nil {
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+
+	parts := make([]minio.CompletePart, 0, len(req.Parts))
+	for _, p := range req.Parts {
+		if p.PartNumber < 1 || p.PartNumber > 10000 || p.ETag == "" {
+			c.JSON(400, gin.H{"error": "each part must have valid part_number and non-empty etag"})
+			return
+		}
+		parts = append(parts, minio.CompletePart{
+			PartNumber: p.PartNumber,
+			ETag:       p.ETag,
+		})
+	}
+
+	sort.Slice(parts, func(i, j int) bool { return parts[i].PartNumber < parts[j].PartNumber })
+
+	ctx := context.Background()
+
+	_, err = core.CompleteMultipartUpload(ctx, bucketConfig.BucketName, req.Key, req.UploadID, parts, minio.PutObjectOptions{})
+	if err != nil {
+		slog.Error("failed to complete multipart upload", "err", err)
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(200, gin.H{"message": "Multipart upload completed"})
+}
+
+func (app *App) MultipartAbort(c *gin.Context) {
+	var req MultipartAbortRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		slog.Error("failed to bind json", "err", err)
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+	if req.Key == "" || req.UploadID == "" {
+		c.JSON(400, gin.H{"error": "key and upload_id are required"})
+		return
+	}
+
+	bucketConfig := authorizeAndExtract(*app, c, req.Bucket)
+	if bucketConfig == nil {
+		return
+	}
+
+	core, err := ConnectCore(*bucketConfig)
+	if err != nil {
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+
+	ctx := context.Background()
+
+	err = core.AbortMultipartUpload(ctx, bucketConfig.BucketName, req.Key, req.UploadID)
+	if err != nil {
+		slog.Error("failed to abort multipart upload", "err", err)
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(200, gin.H{"message": "Multipart upload aborted"})
+}
+
+// ... existing code ...
 
 type ObjectRequest struct {
 	Prefix   string `json:"prefix"`
@@ -319,58 +577,31 @@ func Connect(config BucketConfig) (*minio.Client, error) {
 	}
 
 	return minioClient, nil
+}
 
+func ConnectCore(config BucketConfig) (*minio.Core, error) {
+	endpoint := config.Endpoint
+	accessKeyID := config.AccessKeyId
+	secretAccessKey := config.SecretAccessKey
+	useSSL := config.Secure
+
+	core, err := minio.NewCore(endpoint, &minio.Options{
+		Creds:  credentials.NewStaticV4(accessKeyID, secretAccessKey, ""),
+		Secure: useSSL,
+	})
+	if err != nil {
+		slog.Error(err.Error())
+		return nil, err
+	}
+	return core, nil
 }
 
 func (app *App) Upload(c *gin.Context) {
-
-	bucketName := c.PostForm("bucket")
-
-	fileName := c.PostForm("name") // This will allow us to insert in folders
-
-	bucketConfig := authorizeAndExtract(*app, c, bucketName)
-	if bucketConfig == nil {
-		return
-	}
-
-	mio, err := Connect(*bucketConfig)
-	if err != nil {
-		slog.Error(err.Error())
-		c.JSON(400, gin.H{"error": err.Error()})
-		return
-	}
-
-	ctx := context.Background()
-
-	// 2. Retrieve the file
-	fh, err := c.FormFile("file")
-	if err != nil {
-		slog.Error(err.Error())
-		c.JSON(400, gin.H{"error": err.Error()})
-		return
-	}
-
-	file, err := fh.Open()
-	if err != nil {
-		slog.Error(err.Error())
-		c.JSON(400, gin.H{"error": err.Error()})
-		return
-	}
-	defer file.Close()
-
-	slog.Info("Successfully opened %s", fh.Filename)
-
-	info, err := mio.PutObject(ctx, bucketConfig.BucketName, fileName, file, int64(fh.Size),
-		minio.PutObjectOptions{ContentType: "application/octet-stream"})
-	if err != nil {
-		slog.Error(err.Error())
-		c.JSON(400, gin.H{"error": err.Error()})
-		return
-	}
-
-	slog.Info("Successfully uploaded %s of size %d", fh.Filename, info.Size)
-
-	c.JSON(200, gin.H{"message": "File uploaded successfully"})
+	// Upload is now "Direct Multipart Upload" only: server no longer accepts file bytes.
+	c.JSON(410, gin.H{
+		"error":   "direct multipart upload required",
+		"message": "use /api/v1/objects/multipart/initiate, /multipart/presign_part, /multipart/complete",
+	})
 	return
 }
 
@@ -509,6 +740,7 @@ func (app *App) ListObjects(c *gin.Context) {
 	for object := range channel {
 
 		if object.Err != nil {
+
 			slog.Error(object.Err.Error())
 			c.JSON(400, gin.H{"error": object.Err.Error()})
 			return

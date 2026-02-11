@@ -1,11 +1,61 @@
 import { Injectable } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import {
+  HttpClient,
+  HttpContext,
+  HttpEvent,
+  HttpEventType,
+  HttpResponse,
+} from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
+import { SKIP_AUTH } from '../interceptor/auth-token-interceptor';
+import { filter } from 'rxjs/operators';
 
 export type ObjectApiItem = {
   key: string;
   size: number;
   content_type: string;
+};
+
+type MultipartInitiateRequest = {
+  bucket: string;
+  key: string;
+  content_type?: string;
+};
+
+type MultipartInitiateResponse = {
+  bucket: string;
+  key: string;
+  upload_id: string;
+};
+
+type MultipartPresignPartRequest = {
+  bucket: string;
+  key: string;
+  upload_id: string;
+  part_number: number; // 1..10000
+  expires_seconds?: number; // optional
+};
+
+type MultipartPresignPartResponse = {
+  url: string;
+};
+
+type MultipartCompletedPart = {
+  part_number: number;
+  etag: string;
+};
+
+type MultipartCompleteRequest = {
+  bucket: string;
+  key: string;
+  upload_id: string;
+  parts: MultipartCompletedPart[];
+};
+
+type MultipartAbortRequest = {
+  bucket: string;
+  key: string;
+  upload_id: string;
 };
 
 @Injectable({ providedIn: 'root' })
@@ -19,27 +69,207 @@ export class ObjectStorageService {
     return await firstValueFrom(this.http.post<ObjectApiItem[]>(url, params));
   }
 
-  async uploadObject(params: {
+  private normalizeEtag(etag: string): string {
+    const trimmed = etag.trim();
+    if (trimmed.startsWith('"') && trimmed.endsWith('"') && trimmed.length >= 2) {
+      return trimmed.slice(1, -1);
+    }
+    return trimmed;
+  }
+
+  private async multipartInitiate(
+    params: MultipartInitiateRequest,
+  ): Promise<MultipartInitiateResponse> {
+    const url = `${this.apiBase}/api/v1/objects/multipart/initiate`;
+    return await firstValueFrom(this.http.post<MultipartInitiateResponse>(url, params));
+  }
+
+  private async multipartPresignPart(
+    params: MultipartPresignPartRequest,
+  ): Promise<MultipartPresignPartResponse> {
+    const url = `${this.apiBase}/api/v1/objects/multipart/presign_part`;
+    return await firstValueFrom(this.http.post<MultipartPresignPartResponse>(url, params));
+  }
+
+  private async multipartComplete(params: MultipartCompleteRequest): Promise<void> {
+    const url = `${this.apiBase}/api/v1/objects/multipart/complete`;
+    await firstValueFrom(this.http.post<void>(url, params));
+  }
+
+  private async multipartAbort(params: MultipartAbortRequest): Promise<void> {
+    const url = `${this.apiBase}/api/v1/objects/multipart/abort`;
+    await firstValueFrom(this.http.post<void>(url, params));
+  }
+
+  async uploadObjectMultipart(params: {
     bucket: string;
     key: string;
-    bytes: number[];
+    file: File;
     contentType?: string;
-  }): Promise<void> {
-    const url = `${this.apiBase}/api/v1/objects/upload`;
+    partSizeBytes?: number; // default 8 MiB
+    presignExpiresSeconds?: number; // default backend 900
 
-    const fileName = params.key.split('/').filter(Boolean).pop() ?? params.key;
-    const blob = new Blob([new Uint8Array(params.bytes)], {
-      type: params.contentType ?? 'application/octet-stream',
+    /**
+     * Called as bytes are uploaded. Useful for progress bars.
+     * Note: Some environments may not provide totalBytes reliably; we fall back to file.size.
+     */
+    onProgress?: (info: {
+      percent: number; // 0..100
+      uploadedBytes: number;
+      totalBytes: number;
+      partNumber: number; // 1..partCount
+      partCount: number;
+    }) => void;
+  }): Promise<void> {
+    const partSizeBytes = params.partSizeBytes ?? 8 * 1024 * 1024;
+
+    const initiated = await this.multipartInitiate({
+      bucket: params.bucket,
+      key: params.key,
+      content_type: params.contentType ?? params.file.type ?? 'application/octet-stream',
     });
 
-    const form = new FormData();
-    form.append('bucket', params.bucket);
-    form.append('name', params.key);
-    form.append('file', blob, fileName);
+    const uploadId = initiated.upload_id;
 
-    if (params.contentType) form.append('content_type', params.contentType);
+    try {
+      const totalSize = params.file.size;
+      const partCount = Math.max(1, Math.ceil(totalSize / partSizeBytes));
 
-    await firstValueFrom(this.http.post<void>(url, form));
+      if (partCount > 10000) {
+        throw new Error(
+          `File too large for chosen part size: ${partCount} parts (max 10000). Increase part size.`,
+        );
+      }
+
+      const completedParts: MultipartCompletedPart[] = [];
+
+      // Track aggregate progress across parts
+      const baseUploadedByCompletedParts: number[] = [];
+      let uploadedCompletedBytes = 0;
+
+      for (let partNumber = 1; partNumber <= partCount; partNumber++) {
+        const start = (partNumber - 1) * partSizeBytes;
+        const end = Math.min(start + partSizeBytes, totalSize);
+        const chunk = params.file.slice(start, end);
+        const partSize = end - start;
+
+        const presigned = await this.multipartPresignPart({
+          bucket: params.bucket,
+          key: params.key,
+          upload_id: uploadId,
+          part_number: partNumber,
+          expires_seconds: params.presignExpiresSeconds,
+        });
+
+        let lastLoadedForPart = 0;
+
+        let resp: HttpResponse<string>;
+        try {
+          resp = (await firstValueFrom(
+            this.http
+              .put(presigned.url, chunk, {
+                observe: 'events',
+                reportProgress: true,
+                credentials: 'omit',
+                responseType: 'text',
+                context: new HttpContext().set(SKIP_AUTH, true),
+
+                // Important: do NOT send custom headers to presigned URLs unless they were signed.
+                // headers: { 'Content-Type': ... }  <-- remove
+              })
+              .pipe(
+                filter((event: HttpEvent<string>) => {
+                  if (event.type === HttpEventType.UploadProgress) {
+                    const loaded = Math.min(event.loaded ?? 0, partSize);
+                    lastLoadedForPart = loaded;
+
+                    const uploadedBytes = Math.min(uploadedCompletedBytes + loaded, totalSize);
+                    const totalBytes = totalSize;
+                    const percent =
+                      totalBytes > 0
+                        ? Math.max(0, Math.min(100, (uploadedBytes / totalBytes) * 100))
+                        : 100;
+
+                    params.onProgress?.({
+                      percent,
+                      uploadedBytes,
+                      totalBytes,
+                      partNumber,
+                      partCount,
+                    });
+
+                    return false; // keep waiting for final response
+                  }
+
+                  return event.type === HttpEventType.Response;
+                }),
+              ),
+          )) as HttpResponse<string>;
+        } catch (e) {
+          const anyErr = e as any;
+          const status = anyErr?.status;
+          const statusText = anyErr?.statusText;
+          const body = anyErr?.error;
+
+          throw new Error(
+            `Part ${partNumber} upload failed (${status ?? 'unknown'} ${statusText ?? ''}). ` +
+              `Storage response: ${typeof body === 'string' ? body : '[no body]'}`,
+          );
+        }
+
+        // Mark this part as fully uploaded in our aggregate tracking
+        uploadedCompletedBytes += partSize;
+        baseUploadedByCompletedParts.push(partSize);
+
+        // Emit a "part finished" progress tick (helps UI snap to clean boundaries)
+        const uploadedBytes = Math.min(uploadedCompletedBytes, totalSize);
+        const percent =
+          totalSize > 0 ? Math.max(0, Math.min(100, (uploadedBytes / totalSize) * 100)) : 100;
+
+        params.onProgress?.({
+          percent,
+          uploadedBytes,
+          totalBytes: totalSize,
+          partNumber,
+          partCount,
+        });
+
+        const etagHeader = resp.headers.get('ETag') ?? resp.headers.get('etag');
+        if (!etagHeader) {
+          throw new Error(
+            `Missing ETag for part ${partNumber}. Ensure storage exposes ETag header via CORS.`,
+          );
+        }
+
+        completedParts.push({
+          part_number: partNumber,
+          etag: this.normalizeEtag(etagHeader),
+        });
+      }
+
+      await this.multipartComplete({
+        bucket: params.bucket,
+        key: params.key,
+        upload_id: uploadId,
+        parts: completedParts,
+      });
+
+      // Ensure final 100% callback (in case rounding left you at 99.9%)
+      params.onProgress?.({
+        percent: 100,
+        uploadedBytes: totalSize,
+        totalBytes: totalSize,
+        partNumber: partCount,
+        partCount,
+      });
+    } catch (err) {
+      try {
+        await this.multipartAbort({ bucket: params.bucket, key: params.key, upload_id: uploadId });
+      } catch {
+        // ignore
+      }
+      throw err;
+    }
   }
 
   async downloadObject(params: { bucket: string; filename: string }): Promise<Blob> {
@@ -75,13 +305,14 @@ export class ObjectStorageService {
 
     const blob = await this.downloadObject({ bucket: params.bucket, filename: params.sourceKey });
 
-    const blobBytes = await blob.arrayBuffer();
-    const bytes: number[] = Array.from(new Uint8Array(blobBytes));
+    // Re-upload via multipart (backend no longer accepts direct bytes upload)
+    const file = new File([blob], fileName, { type: blob.type || 'application/octet-stream' });
 
-    await this.uploadObject({
+    await this.uploadObjectMultipart({
       bucket: params.bucket,
       key: destinationKey,
-      bytes,
+      file,
+      contentType: file.type || undefined,
     });
 
     await this.deleteObject({
