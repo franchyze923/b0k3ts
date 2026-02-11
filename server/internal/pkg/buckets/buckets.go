@@ -293,8 +293,8 @@ func (app *App) MultipartAbort(c *gin.Context) {
 // ... existing code ...
 
 type ObjectRequest struct {
-	Prefix   string `json:"prefix"`
-	BucketId string `json:"bucket"`
+	Prefix     string `json:"prefix"`
+	BucketName string `json:"bucket"`
 }
 
 type ObjectDownloadRequest struct {
@@ -549,7 +549,7 @@ func (app *App) AddConnection(c *gin.Context) {
 
 	// Creating Bucket Instance Connection for User
 	//
-	err = badgerDB.PutKV(app.DB, "bucket-"+bucketConfig.BucketId, res)
+	err = badgerDB.PutKV(app.DB, "bucket-"+bucketConfig.BucketName, res)
 	if err != nil {
 		slog.Error(err.Error())
 		c.JSON(400, gin.H{"error": err.Error()})
@@ -778,9 +778,11 @@ func authorizeAndExtract(app App, c *gin.Context, bucketName string) *BucketConf
 			return nil
 		}
 
+		slog.Debug("REQ:", req)
+
 		// Creating Bucket Instance Connection for User
 		//
-		res, err := badgerDB.PullKV(app.DB, "bucket-"+req.BucketId)
+		res, err := badgerDB.PullKV(app.DB, "bucket-"+req.BucketName)
 		if err != nil {
 			slog.Error(err.Error())
 			c.JSON(400, gin.H{"error": err.Error()})

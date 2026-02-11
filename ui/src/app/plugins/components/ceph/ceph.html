@@ -159,6 +159,18 @@
           <ng-container matColumnDef="actions">
             <th mat-header-cell *matHeaderCellDef></th>
             <td mat-cell *matCellDef="let row" class="actions-cell">
+              <button
+                mat-button
+                type="button"
+                (click)="connectBucket(row)"
+                [disabled]="loading() || isConnected(row)"
+                [title]="
+                  isConnected(row) ? 'Already connected' : 'Add to Settings → Bucket Connections'
+                "
+              >
+                {{ isConnected(row) ? 'Connected' : 'Connect' }}
+              </button>
+
               <button mat-button type="button" (click)="getCredentials(row)" [disabled]="loading()">
                 Get Credentials
               </button>

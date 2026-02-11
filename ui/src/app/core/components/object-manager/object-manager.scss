@@ -19,7 +19,7 @@
   border-radius: 8px;
   padding: 10px;
   margin: 8px 0 12px;
-  background: var(--mat-sys-surface, #fff);
+  background: rgba(0, 0, 0, 0.12);
 }
 
 .upload-panel-header {
@@ -138,7 +138,7 @@
 }
 
 .folder-row {
-  
+
   cursor: default;
 }
 
