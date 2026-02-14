@@ -1,4 +1,4 @@
-import { Component, computed, effect, inject, signal } from '@angular/core';
+import { Component, computed, effect, inject, OnInit, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 
@@ -89,7 +89,7 @@ type UploadTask = {
   templateUrl: './object-manager.html',
   styleUrl: './object-manager.scss',
 })
-export class ObjectManager {
+export class ObjectManager implements OnInit {
   private readonly global = inject(GlobalService);
   private readonly dialog = inject(MatDialog);
   private readonly storage = inject(ObjectStorageService);
@@ -97,11 +97,14 @@ export class ObjectManager {
 
   constructor() {
     this.global.updateTitle('Object Manager');
-    void this.loadBucketsFromBackend();
 
     effect(() => {
       this.dataSource.data = this.buildTree(this.objects());
     });
+  }
+
+  ngOnInit() {
+    void this.loadBucketsFromBackend();
   }
 
   readonly buckets = signal<string[]>([]);
@@ -312,10 +315,11 @@ export class ObjectManager {
     return row.obj.contentType || 'File';
   }
 
-  // ---- Data loading / actions ----
   private async loadBucketsFromBackend(): Promise<void> {
     const connections = await this.bucketConfigs.listConnections();
-    const bucketNames = Array.from(new Set(connections.map((c) => c.bucket_name))).sort();
+    const bucketNames = Array.from(new Set(connections.map((c) => c.bucket_name))).sort((a, b) =>
+      a.localeCompare(b),
+    );
 
     this.buckets.set(bucketNames);
 

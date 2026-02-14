@@ -1,4 +1,4 @@
-import { Component, computed, signal } from '@angular/core';
+import { Component, computed, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
 import { MatButtonModule } from '@angular/material/button';
@@ -44,7 +44,7 @@ import { SecureChoiceDialogComponent } from '../../../core/components/settings/s
   templateUrl: './ceph.html',
   styleUrl: './ceph.scss',
 })
-export class Ceph {
+export class Ceph implements OnInit {
   readonly obcName = signal<string>('');
   readonly bucketName = signal<string>('');
   readonly objectBucketName = signal<string>('');
@@ -92,7 +92,9 @@ export class Ceph {
     private readonly kubeconfigs: KubernetesKubeconfigsService,
     private readonly bucketConfigs: BucketConfigsService,
     private readonly auth: Auth,
-  ) {
+  ) {}
+
+  ngOnInit() {
     void this.init();
   }
 
@@ -172,70 +174,146 @@ export class Ceph {
     return true;
   }
 
-  async connectBucket(row: CephBucketRef): Promise<void> {
+  private ensureNamespaceOrNotify(): string | null {
     const ns = this.namespace().trim();
     if (!ns) {
       this.snack.open('Namespace is required', 'Dismiss', { duration: 3000 });
-      return;
+      return null;
     }
+    return ns;
+  }
 
+  private ensureObcOrNotify(row: CephBucketRef): string | null {
     const obc = String(row?.obc ?? '').trim();
     if (!obc) {
       this.snack.open('Missing OBC name', 'Dismiss', { duration: 3000 });
-      return;
+      return null;
     }
+    return obc;
+  }
 
+  private ensureNotAlreadyConnectedOrNotify(row: CephBucketRef): boolean {
     if (this.isConnected(row)) {
       this.snack.open('Bucket is already connected', 'Dismiss', { duration: 2500 });
-      return;
+      return false;
     }
+    return true;
+  }
+
+  private async fetchBucketCreds(
+    ns: string,
+    obc: string,
+  ): Promise<CephBucketCredentials & Record<string, unknown>> {
+    return (await this.ceph.getBucketCredentials(
+      {
+        namespace: ns,
+        mode: this.commMode(),
+        kubeconfigName: this.kubeconfigName(),
+      },
+      obc,
+    )) as CephBucketCredentials & Record<string, unknown>;
+  }
+
+  private resolveEndpointFromCreds(creds: CephBucketCredentials & Record<string, unknown>): string {
+    return String((creds as any)?.endpoint ?? '').trim();
+  }
+
+  private async maybePromptEndpointOverride(args: {
+    row: CephBucketRef;
+    endpointFromCreds: string;
+  }): Promise<string | undefined> {
+    const { row, endpointFromCreds } = args;
+
+    // Ask for endpoint ONLY if missing
+    if (endpointFromCreds) return undefined;
+
+    const provided = this.promptForEndpoint(String(row.bucket_name || row.obc || 'bucket'));
+    if (!provided) {
+      this.snack.open('Endpoint is required to connect this bucket', 'Dismiss', { duration: 3500 });
+      return undefined; // caller should treat as "cancelled"
+    }
+    return provided;
+  }
+
+  private async maybePromptSecureOverride(args: {
+    row: CephBucketRef;
+    creds: CephBucketCredentials & Record<string, unknown>;
+    endpointToUseForDefault: string;
+  }): Promise<boolean | undefined> {
+    const { row, creds, endpointToUseForDefault } = args;
+
+    // Ask for secure if backend didn't provide it
+    const secureFromCreds = (creds as any)?.secure;
+    if (typeof secureFromCreds === 'boolean') return undefined;
+
+    const defaultSecure = this.inferSecureFromEndpoint(endpointToUseForDefault.trim());
+    const choice = await this.promptForSecure(
+      String(row.bucket_name || row.obc || 'bucket'),
+      defaultSecure,
+    );
+
+    // If user cancelled the dialog, don't silently proceed with an implicit choice
+    if (typeof choice !== 'boolean') {
+      this.snack.open('Cancelled: security choice is required', 'Dismiss', { duration: 3000 });
+      return undefined; // caller should treat as "cancelled"
+    }
+
+    return choice;
+  }
+
+  private getMissingBucketConfigFields(cfg: {
+    bucket_id?: string;
+    endpoint?: string;
+    access_key_id?: string;
+    secret_access_key?: string;
+    bucket_name?: string;
+    location?: string;
+  }): string[] {
+    const missing: string[] = [];
+    if (!cfg.bucket_id) missing.push('bucket_id');
+    if (!cfg.endpoint) missing.push('endpoint');
+    if (!cfg.access_key_id) missing.push('access_key_id');
+    if (!cfg.secret_access_key) missing.push('secret_access_key');
+    if (!cfg.bucket_name) missing.push('bucket_name');
+    if (!cfg.location) missing.push('location');
+    return missing;
+  }
+
+  private notifyMissingConfigAndReturnFalse(missing: string[]): boolean {
+    if (missing.length === 0) return true;
+
+    this.snack.open(`Cannot connect bucket (missing: ${missing.join(', ')})`, 'Dismiss', {
+      duration: 4500,
+    });
+    return false;
+  }
+
+  async connectBucket(row: CephBucketRef): Promise<void> {
+    const ns = this.ensureNamespaceOrNotify();
+    if (!ns) return;
+
+    const obc = this.ensureObcOrNotify(row);
+    if (!obc) return;
+
+    if (!this.ensureNotAlreadyConnectedOrNotify(row)) return;
 
     this.loading.set(true);
     try {
-      const creds = (await this.ceph.getBucketCredentials(
-        {
-          namespace: ns,
-          mode: this.commMode(),
-          kubeconfigName: this.kubeconfigName(),
-        },
-        obc,
-      )) as CephBucketCredentials & Record<string, unknown>;
-
+      const creds = await this.fetchBucketCreds(ns, obc);
       const currentUserEmail = await this.ensureCurrentUserEmailLoaded();
 
-      let endpointOverride: string | undefined;
-      let secureOverride: boolean | undefined;
+      const endpointFromCreds = this.resolveEndpointFromCreds(creds);
+      const endpointOverride = await this.maybePromptEndpointOverride({ row, endpointFromCreds });
+      if (!endpointFromCreds && !endpointOverride) return; // endpoint prompt cancelled
 
-      // Ask for endpoint ONLY if missing
-      const endpointFromCreds = String((creds as any)?.endpoint ?? '').trim();
-      if (!endpointFromCreds) {
-        const provided = this.promptForEndpoint(String(row.bucket_name || row.obc || 'bucket'));
-        if (!provided) {
-          this.snack.open('Endpoint is required to connect this bucket', 'Dismiss', {
-            duration: 3500,
-          });
-          return;
-        }
-        endpointOverride = provided;
-      }
-
-      // Ask for secure if backend didn't provide it
-      const secureFromCreds = (creds as any)?.secure;
-      if (typeof secureFromCreds !== 'boolean') {
-        const endpointForDefault = (endpointOverride ?? endpointFromCreds).trim();
-        const defaultSecure = this.inferSecureFromEndpoint(endpointForDefault);
-
-        secureOverride = await this.promptForSecure(
-          String(row.bucket_name || row.obc || 'bucket'),
-          defaultSecure,
-        );
-
-        // If user cancelled the dialog, don't silently proceed with an implicit choice
-        if (typeof secureOverride !== 'boolean') {
-          this.snack.open('Cancelled: security choice is required', 'Dismiss', { duration: 3000 });
-          return;
-        }
-      }
+      const endpointForDefault = (endpointOverride ?? endpointFromCreds).trim();
+      const secureOverride = await this.maybePromptSecureOverride({
+        row,
+        creds,
+        endpointToUseForDefault: endpointForDefault,
+      });
+      if (typeof (creds as any)?.secure !== 'boolean' && typeof secureOverride !== 'boolean')
+        return; // secure prompt cancelled
 
       const cfg = this.cephCredsToBucketConfig({
         row,
@@ -245,21 +323,8 @@ export class Ceph {
         secureOverride,
       });
 
-      // ... existing code ...
-      const missing: string[] = [];
-      if (!cfg.bucket_id) missing.push('bucket_id');
-      if (!cfg.endpoint) missing.push('endpoint');
-      if (!cfg.access_key_id) missing.push('access_key_id');
-      if (!cfg.secret_access_key) missing.push('secret_access_key');
-      if (!cfg.bucket_name) missing.push('bucket_name');
-      if (!cfg.location) missing.push('location');
-
-      if (missing.length > 0) {
-        this.snack.open(`Cannot connect bucket (missing: ${missing.join(', ')})`, 'Dismiss', {
-          duration: 4500,
-        });
-        return;
-      }
+      const missing = this.getMissingBucketConfigFields(cfg);
+      if (!this.notifyMissingConfigAndReturnFalse(missing)) return;
 
       if (!currentUserEmail) {
         this.snack.open(

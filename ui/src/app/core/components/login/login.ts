@@ -1,4 +1,4 @@
-import { Component, signal } from '@angular/core';
+import { Component, OnInit, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import { Auth, AuthenticateResponse } from '../../services/auth';
@@ -11,7 +11,7 @@ type UiState = 'idle' | 'redirecting' | 'processing-callback' | 'authenticated' 
   templateUrl: './login.html',
   styleUrl: './login.scss',
 })
-export class Login {
+export class Login implements OnInit {
   protected readonly state = signal<UiState>('idle');
   protected readonly message = signal<string>('Sign in with your organization account.');
   protected readonly registrationUrl = signal<string | null>(null);
@@ -23,12 +23,15 @@ export class Login {
     private readonly auth: Auth,
     private readonly route: ActivatedRoute,
     private readonly router: Router,
-  ) {
+  ) {}
+
+  ngOnInit() {
     this.handleCallbackIfPresent().catch(() => {
       this.state.set('error');
       this.message.set('Login failed. Please try again.');
     });
   }
+
   async signIn(): Promise<void> {
     this.state.set('redirecting');
     this.message.set('Redirecting…');

@@ -1,4 +1,4 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 
@@ -31,7 +31,7 @@ import { KubernetesKubeconfigsService } from '../../../services/kuberneteskubeco
   templateUrl: './kubernetes.html',
   styleUrl: './kubernetes.scss',
 })
-export class Kubernetes {
+export class Kubernetes implements OnInit {
   private readonly global = inject(GlobalService);
   private readonly kubeconfigs = inject(KubernetesKubeconfigsService);
   private readonly snack = inject(MatSnackBar);
@@ -55,6 +55,9 @@ export class Kubernetes {
 
   constructor() {
     this.global.updateTitle('Settings · Kubernetes');
+  }
+
+  ngOnInit() {
     void this.refreshKubeconfigs();
   }
 

@@ -1,4 +1,4 @@
-import { Component, signal } from '@angular/core';
+import { Component, OnInit, signal } from '@angular/core';
 import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { filter } from 'rxjs/operators';
 import { ThemeService } from './core/services/theme';
@@ -30,7 +30,7 @@ import { MatMenuModule } from '@angular/material/menu';
   templateUrl: './app.html',
   styleUrl: './app.scss',
 })
-export class App {
+export class App implements OnInit {
   protected readonly title = signal('B0K3TS');
   protected readonly authenticated = signal<boolean>(false);
   protected readonly isAdmin = signal<boolean>(false);
@@ -46,9 +46,6 @@ export class App {
     // Ensure the theme attribute is applied on app start
     this.theme.apply(this.theme.theme());
 
-    // Initial auth check + re-check after each navigation
-    void this.refreshAuth();
-
     // Track current URL for sidenav
     this.currentUrl.set(this.router.url);
 
@@ -58,6 +55,11 @@ export class App {
         this.currentUrl.set(this.router.url);
         void this.refreshAuth();
       });
+  }
+
+  ngOnInit() {
+    // Initial auth check + re-check after each navigation
+    void this.refreshAuth();
   }
 
   toggleTheme(): void {

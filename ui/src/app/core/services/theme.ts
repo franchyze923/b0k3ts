@@ -11,7 +11,7 @@ export class ThemeService {
   apply(theme: Theme): void {
     this.theme.set(theme);
     localStorage.setItem(STORAGE_KEY, theme);
-    document.documentElement.setAttribute('data-theme', theme);
+    document.documentElement.dataset['theme'] = theme;
   }
 
   toggle(): void {
@@ -23,8 +23,7 @@ export class ThemeService {
     if (saved === 'light' || saved === 'dark') return saved;
 
     const prefersDark =
-      typeof window !== 'undefined' &&
-      window.matchMedia?.('(prefers-color-scheme: dark)')?.matches;
+      typeof window !== 'undefined' && window.matchMedia?.('(prefers-color-scheme: dark)')?.matches;
 
     return prefersDark ? 'dark' : 'light';
   }
