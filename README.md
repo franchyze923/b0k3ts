@@ -2,7 +2,8 @@
 
 
 
-**B0K3TS** is a lightweight UI-first service for managing **S3-compatible buckets** and **Rook/Ceph ObjectBucketClaims (OBCs)**—built because the Rook/Ceph toolbox doesn’t ship with a friendly bucket management UI.
+**B0K3TS** is a lightweight UI-first service for managing **S3-compatible buckets** and **Rook/Ceph ObjectBucketClaims 
+(OBCs)**—built because the Rook/Ceph doesn’t ship with a friendly bucket management UI.
 
 It lets you:
 
@@ -15,6 +16,10 @@ It lets you:
 ---
 
 ## Features
+
+### B0K3TS UI
+- Login flow (OIDC, Local Login)
+- Buckets Connections Protected by Access Control (Users & Groups)
 
 ### S3 (Buckets & Objects)
 - Store multiple bucket connections
@@ -289,10 +294,6 @@ curl \
 - If you’re running the server **outside** the cluster, use the **kubeconfig** mode.
 - For object upload, the `name` field is the **object key**, so `folder1/file.txt` is perfectly valid.
 
----
 
-## TODO
-
-- For now, when connecting to buckets, the id and bucket name must be the same values.
 
 
