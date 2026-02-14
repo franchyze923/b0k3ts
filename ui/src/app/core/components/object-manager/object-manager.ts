@@ -150,8 +150,8 @@ export class ObjectManager implements OnInit {
     let start = 0;
     let end = s.length;
 
-    while (start < end && s.charCodeAt(start) === 47) start++; // '/'
-    while (end > start && s.charCodeAt(end - 1) === 47) end--; // '/'
+    while (start < end && (s.codePointAt(start) ?? -1) === 47) start++; // '/'
+    while (end > start && (s.codePointAt(end - 1) ?? -1) === 47) end--; // '/'
 
     const core = s.slice(start, end);
     return core === '' ? '' : core + '/';
@@ -163,11 +163,12 @@ export class ObjectManager implements OnInit {
     let start = 0;
     let end = s.length;
 
-    while (start < end && s.charCodeAt(start) === 47) start++;
-    while (end > start && s.charCodeAt(end - 1) === 47) end--;
+    while (start < end && (s.codePointAt(start) ?? -1) === 47) start++;
+    while (end > start && (s.codePointAt(end - 1) ?? -1) === 47) end--;
 
     return s.slice(start, end);
   }
+
   private dirToPrefix(dir: string): string {
     const clean = this.normalizeDirPath(dir);
     return clean ? `${clean}/` : '';
@@ -447,7 +448,7 @@ export class ObjectManager implements OnInit {
   private fileNameFromKey(key: string): string {
     // Avoid regex: trim trailing slashes with a linear scan
     let end = key.length;
-    while (end > 0 && key.charCodeAt(end - 1) === 47) end--; // '/'
+    while (end > 0 && (key.codePointAt(end - 1) ?? -1) === 47) end--; // '/'
 
     const clean = key.slice(0, end);
     const parts = clean.split('/');

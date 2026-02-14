@@ -314,12 +314,16 @@ export class ObjectStorageService {
       expires_seconds: params.expiresSeconds ?? 900,
     });
 
+    if (typeof globalThis === 'undefined' || !('location' in globalThis)) {
+      throw new Error('downloadObjectNative can only run in a browser environment.');
+    }
+
     if (params.openInNewTab) {
-      window.open(res.url, '_blank', 'noopener');
+      (globalThis as unknown as Window).open(res.url, '_blank', 'noopener');
       return;
     }
 
-    window.location.assign(res.url);
+    globalThis.location.assign(res.url);
   }
 
   async deleteObject(params: { bucket: string; filename: string }): Promise<void> {
@@ -377,8 +381,8 @@ export class ObjectStorageService {
       let start = 0;
       let end = p.length;
 
-      while (start < end && p.charCodeAt(start) === 47) start++; // '/'
-      while (end > start && p.charCodeAt(end - 1) === 47) end--; // '/'
+      while (start < end && (p.codePointAt(start) ?? -1) === 47) start++; // '/'
+      while (end > start && (p.codePointAt(end - 1) ?? -1) === 47) end--; // '/'
 
       const core = p.slice(start, end);
       normalizedPrefix = core === '' ? '' : core + '/';

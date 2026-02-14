@@ -23,7 +23,10 @@ export class ThemeService {
     if (saved === 'light' || saved === 'dark') return saved;
 
     const prefersDark =
-      typeof window !== 'undefined' && window.matchMedia?.('(prefers-color-scheme: dark)')?.matches;
+      typeof globalThis !== 'undefined' &&
+      'matchMedia' in globalThis &&
+      typeof globalThis.matchMedia === 'function' &&
+      globalThis.matchMedia('(prefers-color-scheme: dark)').matches;
 
     return prefersDark ? 'dark' : 'light';
   }

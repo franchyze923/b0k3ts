@@ -14,6 +14,7 @@ export type SecureChoiceDialogData = {
   standalone: true,
   imports: [MatDialogModule, MatButtonModule, MatFormFieldModule, MatSelectModule],
   templateUrl: 'securechoicedialog.html',
+  styleUrls: ['./securechoicedialog.scss'],
 })
 export class SecureChoiceDialogComponent {
   value: boolean;
@@ -26,7 +27,7 @@ export class SecureChoiceDialogComponent {
   }
 
   cancel(): void {
-    this.ref.close(undefined);
+    this.ref.close();
   }
 
   confirm(): void {
