@@ -54,11 +54,11 @@ export class OidcSettings implements OnInit {
     this.global.updateTitle('Settings · OIDC');
   }
 
-  async ngOnInit(): Promise<void> {
-    await this.refresh();
+  ngOnInit() {
+    this.refresh().then((_) => {});
   }
 
-  async refresh(): Promise<void> {
+  async refresh() {
     try {
       this.loading.set(true);
       const cfg = await this.oidc.getConfig();

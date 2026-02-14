@@ -102,9 +102,9 @@ export class BucketConnectionsSettings implements OnInit {
     // this.global.updateTitle('Settings · Bucket Connections');
   }
 
-  async ngOnInit(): Promise<void> {
+  ngOnInit() {
     queueMicrotask(() => this.global.updateTitle('Settings · Bucket Connections'));
-    await this.refreshBuckets();
+    this.refreshBuckets().then((_) => {});
   }
 
   private async refreshBuckets(): Promise<void> {

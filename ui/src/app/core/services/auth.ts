@@ -164,7 +164,7 @@ export class Auth {
 
   private base64UrlEncode(bytes: Uint8Array): string {
     let binary = '';
-    for (const b of bytes) binary += String.fromCharCode(b);
+    for (const b of bytes) binary += String.fromCodePoint(b);
 
     const base64 = btoa(binary);
 
