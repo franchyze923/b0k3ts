@@ -90,6 +90,7 @@ func (app *App) Serve() {
 			objects.POST("/download", bucket.Download)
 			objects.POST("/delete", bucket.Delete)
 			objects.POST("/list", bucket.ListObjects)
+			objects.POST("/move", bucket.Move)
 
 			// Direct Multipart Upload:
 			objects.POST("/multipart/initiate", bucket.MultipartInitiate)

@@ -58,6 +58,21 @@ type MultipartAbortRequest = {
   upload_id: string;
 };
 
+/**
+ * Backend API: POST /api/v1/objects/move
+ *
+ * - Move a single object: { bucket, from_key, to_key, overwrite? }
+ * - Move a prefix ("folder"): { bucket, from_prefix, to_prefix, overwrite? }
+ */
+export type ObjectMoveRequest = {
+  bucket: string;
+  from_key?: string;
+  to_key?: string;
+  from_prefix?: string;
+  to_prefix?: string;
+  overwrite?: boolean; // optional; default false
+};
+
 @Injectable({ providedIn: 'root' })
 export class ObjectStorageService {
   private readonly apiBase = '';
@@ -288,36 +303,70 @@ export class ObjectStorageService {
     await firstValueFrom(this.http.post<void>(url, params));
   }
 
+  async moveObjects(params: ObjectMoveRequest): Promise<void> {
+    const url = `${this.apiBase}/api/v1/objects/move`;
+    await firstValueFrom(this.http.post<void>(url, params));
+  }
+
+  async moveObject(params: {
+    bucket: string;
+    fromKey: string;
+    toKey: string;
+    overwrite?: boolean;
+  }): Promise<void> {
+    await this.moveObjects({
+      bucket: params.bucket,
+      from_key: params.fromKey,
+      to_key: params.toKey,
+      overwrite: params.overwrite,
+    });
+  }
+
+  async movePrefix(params: {
+    bucket: string;
+    fromPrefix: string;
+    toPrefix: string;
+    overwrite?: boolean;
+  }): Promise<void> {
+    await this.moveObjects({
+      bucket: params.bucket,
+      from_prefix: params.fromPrefix,
+      to_prefix: params.toPrefix,
+      overwrite: params.overwrite,
+    });
+  }
+
   async moveObjectByPrefix(params: {
     bucket: string;
     sourceKey: string;
     destinationPrefix: string;
+    overwrite?: boolean;
   }): Promise<{
     destinationKey: string;
   }> {
     const fileName = params.sourceKey.split('/').filter(Boolean).pop() ?? params.sourceKey;
-    const normalizedPrefix =
-      params.destinationPrefix.trim().length === 0
-        ? ''
-        : params.destinationPrefix.trim().replace(/^\/+/, '').replace(/\/+$/, '') + '/';
+
+    // Avoid regex (linear-time scans only)
+    const p = params.destinationPrefix.trim();
+    let normalizedPrefix = '';
+    if (p.length !== 0) {
+      let start = 0;
+      let end = p.length;
+
+      while (start < end && p.charCodeAt(start) === 47) start++; // '/'
+      while (end > start && p.charCodeAt(end - 1) === 47) end--; // '/'
+
+      const core = p.slice(start, end);
+      normalizedPrefix = core === '' ? '' : core + '/';
+    }
 
     const destinationKey = `${normalizedPrefix}${fileName}`;
 
-    const blob = await this.downloadObject({ bucket: params.bucket, filename: params.sourceKey });
-
-    // Re-upload via multipart (backend no longer accepts direct bytes upload)
-    const file = new File([blob], fileName, { type: blob.type || 'application/octet-stream' });
-
-    await this.uploadObjectMultipart({
+    await this.moveObject({
       bucket: params.bucket,
-      key: destinationKey,
-      file,
-      contentType: file.type || undefined,
-    });
-
-    await this.deleteObject({
-      bucket: params.bucket,
-      filename: params.sourceKey,
+      fromKey: params.sourceKey,
+      toKey: destinationKey,
+      overwrite: params.overwrite,
     });
 
     return { destinationKey };

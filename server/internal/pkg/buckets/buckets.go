@@ -14,6 +14,7 @@ import (
 	"net/url"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/dgraph-io/badger/v4"
@@ -40,7 +41,14 @@ type BucketDeleteRequest struct {
 	BucketId string `json:"bucket_id"`
 }
 
-// --- Direct Multipart Upload (server presigns, client uploads parts directly) ---
+type ObjectMoveRequest struct {
+	Bucket     string `json:"bucket"`
+	FromKey    string `json:"from_key,omitempty"`    // move a single object
+	ToKey      string `json:"to_key,omitempty"`      // move a single object
+	FromPrefix string `json:"from_prefix,omitempty"` // move a "folder" (prefix)
+	ToPrefix   string `json:"to_prefix,omitempty"`   // move a "folder" (prefix)
+	Overwrite  bool   `json:"overwrite,omitempty"`   // optional; default false
+}
 
 type MultipartInitiateRequest struct {
 	Bucket      string `json:"bucket"`       // bucket connection id (same meaning as your other endpoints)
@@ -82,6 +90,160 @@ type MultipartAbortRequest struct {
 	Bucket   string `json:"bucket"`
 	Key      string `json:"key"`
 	UploadID string `json:"upload_id"`
+}
+type ObjectMoveResponse struct {
+	Moved int `json:"moved"`
+}
+
+func normalizePrefix(p string) string {
+	if p == "" {
+		return ""
+	}
+	// Treat prefixes as "folders" => ensure trailing slash for predictable trimming.
+	if !strings.HasSuffix(p, "/") {
+		return p + "/"
+	}
+	return p
+}
+
+func (app *App) Move(c *gin.Context) {
+	var req ObjectMoveRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		slog.Error("failed to bind json", "err", err)
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+
+	bucketConfig := authorizeAndExtract(*app, c, req.Bucket)
+	if bucketConfig == nil {
+		return
+	}
+
+	mio, err := Connect(*bucketConfig)
+	if err != nil {
+		slog.Error(err.Error())
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+
+	ctx := context.Background()
+
+	// Determine mode: single-object move vs prefix move.
+	if req.FromKey != "" || req.ToKey != "" {
+		if req.FromKey == "" || req.ToKey == "" {
+			c.JSON(400, gin.H{"error": "from_key and to_key are required for single object move"})
+			return
+		}
+		if req.FromKey == req.ToKey {
+			c.JSON(400, gin.H{"error": "from_key and to_key must be different"})
+			return
+		}
+
+		// If not overwriting, check destination doesn't exist.
+		if !req.Overwrite {
+			_, err := mio.StatObject(ctx, bucketConfig.BucketName, req.ToKey, minio.StatObjectOptions{})
+			if err == nil {
+				c.JSON(409, gin.H{"error": "destination object already exists"})
+				return
+			}
+		}
+
+		src := minio.CopySrcOptions{
+			Bucket: bucketConfig.BucketName,
+			Object: req.FromKey,
+		}
+		dst := minio.CopyDestOptions{
+			Bucket: bucketConfig.BucketName,
+			Object: req.ToKey,
+		}
+
+		if _, err := mio.CopyObject(ctx, dst, src); err != nil {
+			slog.Error("failed to copy object", "err", err)
+			c.JSON(400, gin.H{"error": err.Error()})
+			return
+		}
+
+		if err := mio.RemoveObject(ctx, bucketConfig.BucketName, req.FromKey, minio.RemoveObjectOptions{}); err != nil {
+			slog.Error("failed to delete source object after copy", "err", err)
+			c.JSON(400, gin.H{"error": err.Error()})
+			return
+		}
+
+		c.JSON(200, ObjectMoveResponse{Moved: 1})
+		return
+	}
+
+	fromPrefix := normalizePrefix(req.FromPrefix)
+	toPrefix := normalizePrefix(req.ToPrefix)
+
+	if fromPrefix == "" || toPrefix == "" {
+		c.JSON(400, gin.H{"error": "either (from_key,to_key) or (from_prefix,to_prefix) must be provided"})
+		return
+	}
+	if fromPrefix == toPrefix {
+		c.JSON(400, gin.H{"error": "from_prefix and to_prefix must be different"})
+		return
+	}
+
+	// Move all objects under fromPrefix to toPrefix (server-side copy+delete).
+	moved := 0
+
+	ch := mio.ListObjects(ctx, bucketConfig.BucketName, minio.ListObjectsOptions{
+		Prefix:    fromPrefix,
+		Recursive: true,
+	})
+
+	for obj := range ch {
+		if obj.Err != nil {
+			slog.Error("failed to list objects for move", "err", obj.Err)
+			c.JSON(400, gin.H{"error": obj.Err.Error()})
+			return
+		}
+
+		rel := strings.TrimPrefix(obj.Key, fromPrefix)
+		if rel == "" {
+			// Shouldn't happen for real objects, but keep it safe.
+			continue
+		}
+		newKey := toPrefix + rel
+
+		if !req.Overwrite {
+			_, err := mio.StatObject(ctx, bucketConfig.BucketName, newKey, minio.StatObjectOptions{})
+			if err == nil {
+				c.JSON(409, gin.H{
+					"error":   "destination object already exists",
+					"object":  newKey,
+					"message": "set overwrite=true to replace existing objects",
+				})
+				return
+			}
+		}
+
+		src := minio.CopySrcOptions{
+			Bucket: bucketConfig.BucketName,
+			Object: obj.Key,
+		}
+		dst := minio.CopyDestOptions{
+			Bucket: bucketConfig.BucketName,
+			Object: newKey,
+		}
+
+		if _, err := mio.CopyObject(ctx, dst, src); err != nil {
+			slog.Error("failed to copy object during prefix move", "from", obj.Key, "to", newKey, "err", err)
+			c.JSON(400, gin.H{"error": err.Error(), "from": obj.Key, "to": newKey})
+			return
+		}
+
+		if err := mio.RemoveObject(ctx, bucketConfig.BucketName, obj.Key, minio.RemoveObjectOptions{}); err != nil {
+			slog.Error("failed to delete source object during prefix move", "key", obj.Key, "err", err)
+			c.JSON(400, gin.H{"error": err.Error(), "key": obj.Key})
+			return
+		}
+
+		moved++
+	}
+
+	c.JSON(200, ObjectMoveResponse{Moved: moved})
 }
 
 func (app *App) MultipartInitiate(c *gin.Context) {
@@ -685,7 +847,7 @@ func (app *App) Delete(c *gin.Context) {
 		return
 	}
 
-	err = mio.RemoveObject(ctx, req.Bucket, req.Filename, minio.RemoveObjectOptions{})
+	err = mio.RemoveObject(ctx, bucketConfig.BucketName, req.Filename, minio.RemoveObjectOptions{})
 	if err != nil {
 		slog.Error(err.Error())
 		c.JSON(400, gin.H{"error": err.Error()})

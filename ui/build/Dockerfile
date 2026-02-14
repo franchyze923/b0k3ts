@@ -21,3 +21,5 @@ RUN rm /etc/nginx/conf.d/default.conf
 COPY build/default.conf /etc/nginx/conf.d/default.conf
 
 COPY --from=build /app/dist/b0k3ts/browser /usr/share/nginx/html
+
+USER nginx

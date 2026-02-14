@@ -167,7 +167,12 @@ export class Auth {
     for (const b of bytes) binary += String.fromCharCode(b);
 
     const base64 = btoa(binary);
-    return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+
+    // Avoid regex (linear-time string ops only)
+    let out = base64.replaceAll('+', '-').replaceAll('/', '_');
+    while (out.endsWith('=')) out = out.slice(0, -1);
+
+    return out;
   }
 }
 

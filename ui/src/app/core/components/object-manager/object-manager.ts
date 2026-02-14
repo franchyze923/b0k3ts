@@ -141,29 +141,36 @@ export class ObjectManager {
   }
 
   private normalizePrefix(prefix: string): string {
-    const trimmed = prefix.trim();
-    if (!trimmed) return '';
-    return trimmed.replace(/^\/+/, '').replace(/\/+$/, '') + '/';
+    const s = prefix.trim();
+    if (s === '') return '';
+
+    let start = 0;
+    let end = s.length;
+
+    while (start < end && s.charCodeAt(start) === 47) start++; // '/'
+    while (end > start && s.charCodeAt(end - 1) === 47) end--; // '/'
+
+    const core = s.slice(start, end);
+    return core === '' ? '' : core + '/';
   }
 
   private normalizeDirPath(path: string): string {
-    return path.trim().replace(/^\/+/, '').replace(/\/+$/, '');
-  }
+    const s = path.trim();
 
+    let start = 0;
+    let end = s.length;
+
+    while (start < end && s.charCodeAt(start) === 47) start++;
+    while (end > start && s.charCodeAt(end - 1) === 47) end--;
+
+    return s.slice(start, end);
+  }
   private dirToPrefix(dir: string): string {
     const clean = this.normalizeDirPath(dir);
     return clean ? `${clean}/` : '';
   }
 
-  // --- Tree (left pane) ---
   readonly dataSource = new MatTreeNestedDataSource<TreeNode>();
-
-  readonly childrenAccessor = (node: TreeNode): TreeNode[] =>
-    node.kind === 'dir' ? node.children : [];
-
-  readonly isDir = (_: number, node: TreeNode) => node.kind === 'dir';
-  readonly isFile = (_: number, node: TreeNode): node is Extract<TreeNode, { kind: 'file' }> =>
-    node.kind === 'file';
 
   private buildTree(objects: BucketObject[]): TreeNode[] {
     const root: { kind: 'dir'; name: string; path: string; children: TreeNode[] } = {
@@ -438,7 +445,11 @@ export class ObjectManager {
   }
 
   private fileNameFromKey(key: string): string {
-    const clean = key.replace(/\/+$/, '');
+    // Avoid regex: trim trailing slashes with a linear scan
+    let end = key.length;
+    while (end > 0 && key.charCodeAt(end - 1) === 47) end--; // '/'
+
+    const clean = key.slice(0, end);
     const parts = clean.split('/');
     return parts[parts.length - 1] || 'download';
   }
