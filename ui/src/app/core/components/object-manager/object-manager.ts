@@ -329,7 +329,6 @@ export class ObjectManager {
 
     this.selectedBucket.set(next);
 
-    // Reset navigation when switching buckets (Explorer behavior)
     this.currentDir.set('');
 
     if (next) {
@@ -382,7 +381,7 @@ export class ObjectManager {
     // Create tasks up-front so UI shows a queue immediately
     const tasks: UploadTask[] = Array.from(files).map((file) => {
       const key = `${prefix}${file.name}`;
-      const id = `${Date.now()}-${Math.random().toString(16).slice(2)}-${key}`;
+      const id = `${Date.now()}-${crypto.randomUUID()}-${key}`;
       return {
         id,
         fileName: file.name,
@@ -400,7 +399,7 @@ export class ObjectManager {
     for (const file of Array.from(files)) {
       const key = `${prefix}${file.name}`;
       const task = this.uploadTasks().find((t) => t.key === key && t.totalBytes === file.size);
-      const id = task?.id ?? `${Date.now()}-${Math.random().toString(16).slice(2)}-${key}`;
+      const id = task?.id ?? `${Date.now()}-${crypto.randomUUID()}-${key}`;
 
       this.updateUploadTask(id, { status: 'uploading', errorMessage: undefined });
 
@@ -420,9 +419,6 @@ export class ObjectManager {
               partCount,
             });
           },
-          // Optional tuning:
-          // partSizeBytes: 8 * 1024 * 1024,
-          // presignExpiresSeconds: 900,
         });
 
         this.updateUploadTask(id, { status: 'done', percent: 100, uploadedBytes: file.size });
@@ -458,20 +454,13 @@ export class ObjectManager {
     const bucket = this.selectedBucket();
     if (!bucket) return;
 
-    const blob = await this.storage.downloadObject({ bucket, filename: obj.key });
-
-    const url = URL.createObjectURL(blob);
-    try {
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = this.fileNameFromKey(obj.key);
-      a.rel = 'noopener';
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-    } finally {
-      URL.revokeObjectURL(url);
-    }
+    await this.storage.downloadObjectNative({
+      bucket,
+      key: obj.key,
+      filename: this.fileNameFromKey(obj.key), // optional, but nice for Content-Disposition
+      disposition: 'attachment',
+      // openInNewTab: true, // optional
+    });
   }
 
   private getPrefixFromKey(key: string): string {

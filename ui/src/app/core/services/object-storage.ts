@@ -10,6 +10,18 @@ import { firstValueFrom } from 'rxjs';
 import { SKIP_AUTH } from '../interceptor/auth-token-interceptor';
 import { filter } from 'rxjs/operators';
 
+type PresignDownloadRequest = {
+  bucket: string;
+  key: string;
+  expires_seconds?: number;
+  disposition?: 'attachment' | 'inline';
+  filename?: string;
+};
+
+type PresignDownloadResponse = {
+  url: string;
+};
+
 export type ObjectApiItem = {
   key: string;
   size: number;
@@ -58,12 +70,6 @@ type MultipartAbortRequest = {
   upload_id: string;
 };
 
-/**
- * Backend API: POST /api/v1/objects/move
- *
- * - Move a single object: { bucket, from_key, to_key, overwrite? }
- * - Move a prefix ("folder"): { bucket, from_prefix, to_prefix, overwrite? }
- */
 export type ObjectMoveRequest = {
   bucket: string;
   from_key?: string;
@@ -287,15 +293,33 @@ export class ObjectStorageService {
     }
   }
 
-  async downloadObject(params: { bucket: string; filename: string }): Promise<Blob> {
-    const url = `${this.apiBase}/api/v1/objects/download`;
-    return await firstValueFrom(
-      this.http.post(
-        url,
-        { bucket: params.bucket, filename: params.filename },
-        { responseType: 'blob' },
-      ),
-    );
+  async presignDownload(params: PresignDownloadRequest): Promise<PresignDownloadResponse> {
+    const url = `${this.apiBase}/api/v1/objects/presign-download`;
+    return await firstValueFrom(this.http.post<PresignDownloadResponse>(url, params));
+  }
+
+  async downloadObjectNative(params: {
+    bucket: string;
+    key: string;
+    filename?: string;
+    disposition?: 'attachment' | 'inline';
+    expiresSeconds?: number;
+    openInNewTab?: boolean;
+  }): Promise<void> {
+    const res = await this.presignDownload({
+      bucket: params.bucket,
+      key: params.key,
+      filename: params.filename,
+      disposition: params.disposition ?? 'attachment',
+      expires_seconds: params.expiresSeconds ?? 900,
+    });
+
+    if (params.openInNewTab) {
+      window.open(res.url, '_blank', 'noopener');
+      return;
+    }
+
+    window.location.assign(res.url);
   }
 
   async deleteObject(params: { bucket: string; filename: string }): Promise<void> {

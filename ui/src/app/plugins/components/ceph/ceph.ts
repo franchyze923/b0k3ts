@@ -22,6 +22,8 @@ import { CephCredsDialogComponent } from '../cephcredssnack/cephcredssnack';
 import { KubernetesKubeconfigsService } from '../../../core/services/kuberneteskubeconfigs';
 import { BucketConfigsService } from '../../../core/services/bucket-configs';
 import { Auth } from '../../../core/services/auth';
+import { firstValueFrom } from 'rxjs';
+import { SecureChoiceDialogComponent } from '../../../core/components/settings/securechoicedialog/securechoicedialog';
 
 @Component({
   selector: 'app-ceph',
@@ -140,76 +142,34 @@ export class Ceph {
 
   private promptForEndpoint(bucketLabel: string): string | null {
     const raw = window.prompt(
-      `Endpoint is missing for "${bucketLabel}".\n\nEnter S3 endpoint (example: https://s3.example.com):`,
+      `Endpoint is missing for "${bucketLabel}".\n\nEnter S3 endpoint (example: s3.example.com:80):`,
       '',
     );
     const v = (raw ?? '').trim();
     return v.length > 0 ? v : null;
   }
 
-  private promptForSecure(bucketLabel: string, defaultSecure: boolean): boolean | undefined {
-    const ok = window.confirm(
-      `Use a secure (TLS/HTTPS) connection for "${bucketLabel}"?\n\n` +
-        `OK = Secure (true)\nCancel = Insecure (false)\n\n` +
-        `Suggested default: ${defaultSecure ? 'Secure' : 'Insecure'}`,
-    );
-    return ok;
+  private async promptForSecure(
+    bucketLabel: string,
+    defaultSecure: boolean,
+  ): Promise<boolean | undefined> {
+    const ref = this.dialog.open(SecureChoiceDialogComponent, {
+      width: '420px',
+      data: { bucketLabel, defaultSecure },
+      autoFocus: false,
+      restoreFocus: true,
+      hasBackdrop: true,
+    });
+
+    return (await firstValueFrom(ref.afterClosed())) as boolean | undefined;
   }
+
   private inferSecureFromEndpoint(endpoint: string): boolean {
     const e = endpoint.trim().toLowerCase();
     if (e.startsWith('https://')) return true;
     if (e.startsWith('http://')) return false;
     // If scheme-less, safest default is secure
     return true;
-  }
-
-  private cephCredsToBucketConfig(args: {
-    row: CephBucketRef;
-    creds: CephBucketCredentials & Record<string, unknown>;
-    currentUserEmail: string;
-    endpointOverride?: string;
-    secureOverride?: boolean;
-  }) {
-    const { row, creds, currentUserEmail, endpointOverride, secureOverride } = args;
-
-    const bucket_id = String(row?.obc ?? '').trim();
-    const bucket_name = String(row?.bucket_name ?? '').trim();
-
-    const endpoint =
-      String(endpointOverride ?? '').trim() || String((creds as any)?.endpoint ?? '').trim();
-
-    const access_key_id = String(
-      (creds as any)?.access_key_id ?? (creds as any)?.AWS_ACCESS_KEY_ID ?? '',
-    ).trim();
-
-    const secret_access_key = String(
-      (creds as any)?.secret_access_key ?? (creds as any)?.AWS_SECRET_ACCESS_KEY ?? '',
-    ).trim();
-
-    const location =
-      String((creds as any)?.location ?? (creds as any)?.region ?? '').trim() || 'us-east-1';
-
-    const secure =
-      typeof secureOverride === 'boolean'
-        ? secureOverride
-        : typeof (creds as any)?.secure === 'boolean'
-          ? ((creds as any).secure as boolean)
-          : this.inferSecureFromEndpoint(endpoint);
-
-    const authorized_users = currentUserEmail ? [currentUserEmail] : [];
-    const authorized_groups: string[] = [];
-
-    return {
-      bucket_id,
-      endpoint,
-      access_key_id,
-      secret_access_key,
-      secure,
-      bucket_name,
-      location,
-      authorized_users,
-      authorized_groups,
-    };
   }
 
   async connectBucket(row: CephBucketRef): Promise<void> {
@@ -265,10 +225,16 @@ export class Ceph {
         const endpointForDefault = (endpointOverride ?? endpointFromCreds).trim();
         const defaultSecure = this.inferSecureFromEndpoint(endpointForDefault);
 
-        secureOverride = this.promptForSecure(
+        secureOverride = await this.promptForSecure(
           String(row.bucket_name || row.obc || 'bucket'),
           defaultSecure,
         );
+
+        // If user cancelled the dialog, don't silently proceed with an implicit choice
+        if (typeof secureOverride !== 'boolean') {
+          this.snack.open('Cancelled: security choice is required', 'Dismiss', { duration: 3000 });
+          return;
+        }
       }
 
       const cfg = this.cephCredsToBucketConfig({
@@ -279,7 +245,7 @@ export class Ceph {
         secureOverride,
       });
 
-      // Validate: should NOT complain about keys if creds includes AWS_* names
+      // ... existing code ...
       const missing: string[] = [];
       if (!cfg.bucket_id) missing.push('bucket_id');
       if (!cfg.endpoint) missing.push('endpoint');
@@ -315,6 +281,55 @@ export class Ceph {
     } finally {
       this.loading.set(false);
     }
+  }
+
+  private cephCredsToBucketConfig(args: {
+    row: CephBucketRef;
+    creds: CephBucketCredentials & Record<string, unknown>;
+    currentUserEmail: string;
+    endpointOverride?: string;
+    secureOverride?: boolean;
+  }) {
+    const { row, creds, currentUserEmail, endpointOverride, secureOverride } = args;
+
+    const bucket_id = String(row?.obc ?? '').trim();
+    const bucket_name = String(row?.bucket_name ?? '').trim();
+
+    const endpoint =
+      String(endpointOverride ?? '').trim() || String((creds as any)?.endpoint ?? '').trim();
+
+    const access_key_id = String(
+      (creds as any)?.access_key_id ?? (creds as any)?.AWS_ACCESS_KEY_ID ?? '',
+    ).trim();
+
+    const secret_access_key = String(
+      (creds as any)?.secret_access_key ?? (creds as any)?.AWS_SECRET_ACCESS_KEY ?? '',
+    ).trim();
+
+    const location =
+      String((creds as any)?.location ?? (creds as any)?.region ?? '').trim() || 'us-east-1';
+
+    const secure =
+      typeof secureOverride === 'boolean'
+        ? secureOverride
+        : typeof (creds as any)?.secure === 'boolean'
+          ? ((creds as any).secure as boolean)
+          : this.inferSecureFromEndpoint(endpoint);
+
+    const authorized_users = currentUserEmail ? [currentUserEmail] : [];
+    const authorized_groups: string[] = [];
+
+    return {
+      bucket_id,
+      endpoint,
+      access_key_id,
+      secret_access_key,
+      secure,
+      bucket_name,
+      location,
+      authorized_users,
+      authorized_groups,
+    };
   }
 
   async refreshKubeconfigs(): Promise<void> {

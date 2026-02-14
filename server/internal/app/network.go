@@ -88,6 +88,9 @@ func (app *App) Serve() {
 		{
 			// objects.POST("/upload", bucket.Upload) // removed: multipart only
 			objects.POST("/download", bucket.Download)
+			objects.GET("/download/:bucket/*key", bucket.DownloadNative)
+			objects.POST("/presign-download", bucket.PresignDownload)
+
 			objects.POST("/delete", bucket.Delete)
 			objects.POST("/list", bucket.ListObjects)
 			objects.POST("/move", bucket.Move)

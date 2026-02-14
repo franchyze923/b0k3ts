@@ -12,6 +12,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"path"
 	"sort"
 	"strconv"
 	"strings"
@@ -24,6 +25,18 @@ import (
 	"github.com/minio/minio-go/v7/pkg/credentials"
 	"github.com/samber/lo"
 )
+
+type PresignDownloadRequest struct {
+	Bucket         string `json:"bucket"`                    // bucket connection id
+	Key            string `json:"key"`                       // object key/path in the bucket
+	ExpiresSeconds int64  `json:"expires_seconds,omitempty"` // optional; default 900
+	Disposition    string `json:"disposition,omitempty"`     // optional: "attachment" (default) or "inline"
+	Filename       string `json:"filename,omitempty"`        // optional: override filename in Content-Disposition
+}
+
+type PresignDownloadResponse struct {
+	URL string `json:"url"`
+}
 
 type BucketConfig struct {
 	BucketId         string   `json:"bucket_id"`
@@ -106,6 +119,67 @@ func normalizePrefix(p string) string {
 	return p
 }
 
+func (app *App) PresignDownload(c *gin.Context) {
+	var req PresignDownloadRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		slog.Error("failed to bind json", "err", err)
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+	if req.Bucket == "" || req.Key == "" {
+		c.JSON(400, gin.H{"error": "bucket and key are required"})
+		return
+	}
+
+	bucketConfig := authorizeAndExtract(*app, c, req.Bucket)
+	if bucketConfig == nil {
+		return
+	}
+
+	mio, err := Connect(*bucketConfig)
+	if err != nil {
+		slog.Error(err.Error())
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+
+	expires := req.ExpiresSeconds
+	if expires <= 0 {
+		expires = 900
+	}
+	if expires > 7*24*3600 {
+		c.JSON(400, gin.H{"error": "expires_seconds too large"})
+		return
+	}
+
+	// Build response header overrides for browser-friendly downloads.
+	disp := strings.ToLower(strings.TrimSpace(req.Disposition))
+	if disp != "inline" {
+		disp = "attachment"
+	}
+
+	filename := strings.TrimSpace(req.Filename)
+	if filename == "" {
+		filename = path.Base(req.Key)
+		if filename == "." || filename == "/" || filename == "" {
+			filename = "download"
+		}
+	}
+
+	q := make(url.Values, 2)
+	q.Set("response-content-disposition", fmt.Sprintf("%s; filename=%q", disp, filename))
+	q.Set("response-content-type", "application/octet-stream")
+
+	ctx := context.Background()
+	u, err := mio.Presign(ctx, http.MethodGet, bucketConfig.BucketName, req.Key, time.Duration(expires)*time.Second, q)
+	if err != nil {
+		slog.Error("failed to presign download url", "err", err)
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(200, PresignDownloadResponse{URL: u.String()})
+}
 func (app *App) Move(c *gin.Context) {
 	var req ObjectMoveRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -765,6 +839,74 @@ func (app *App) Upload(c *gin.Context) {
 		"message": "use /api/v1/objects/multipart/initiate, /multipart/presign_part, /multipart/complete",
 	})
 	return
+}
+
+func (app *App) DownloadNative(c *gin.Context) {
+	bucketID := c.Param("bucket")
+	key := c.Param("key") // includes leading "/" because of the wildcard
+	key = strings.TrimPrefix(key, "/")
+
+	if bucketID == "" || key == "" {
+		c.JSON(400, gin.H{"error": "bucket and key are required"})
+		return
+	}
+
+	bucketConfig := authorizeAndExtract(*app, c, bucketID)
+	if bucketConfig == nil {
+		return
+	}
+
+	mio, err := Connect(*bucketConfig)
+	if err != nil {
+		slog.Error(err.Error())
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+
+	ctx := context.Background()
+
+	obj, err := mio.GetObject(ctx, bucketConfig.BucketName, key, minio.GetObjectOptions{})
+	if err != nil {
+		slog.Error(err.Error())
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+	defer obj.Close()
+
+	st, err := obj.Stat()
+	if err != nil {
+		slog.Error(err.Error())
+		c.JSON(404, gin.H{"error": "object not found"})
+		return
+	}
+
+	// Pick a friendly filename for the browser.
+	filename := path.Base(key)
+	if filename == "." || filename == "/" || filename == "" {
+		filename = "download"
+	}
+
+	disposition := strings.ToLower(strings.TrimSpace(c.Query("disposition")))
+	if disposition != "inline" {
+		disposition = "attachment"
+	}
+
+	contentType := st.ContentType
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+
+	c.Header("Content-Type", contentType)
+	c.Header("Content-Length", fmt.Sprintf("%d", st.Size))
+	c.Header("Content-Disposition", fmt.Sprintf("%s; filename=%q", disposition, filename))
+
+	// Stream the response (no buffering the whole object in memory).
+	c.Status(http.StatusOK)
+	if _, err := io.Copy(c.Writer, obj); err != nil {
+		// At this point headers/body may already be partially written; just log.
+		slog.Error("stream download failed", "err", err, "bucket", bucketID, "key", key)
+		return
+	}
 }
 
 func (app *App) Download(c *gin.Context) {

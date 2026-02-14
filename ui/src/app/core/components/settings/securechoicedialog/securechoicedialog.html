@@ -1,0 +1,21 @@
+<h2 mat-dialog-title>Connection security</h2>
+
+<div mat-dialog-content>
+  <p>
+    Choose how to connect to <strong>{{ data.bucketLabel }}</strong
+    >.
+  </p>
+
+  <mat-form-field appearance="outline" style="width: 100%">
+    <mat-label>Security</mat-label>
+    <mat-select [(value)]="value">
+      <mat-option [value]="true">Secure (TLS/HTTPS)</mat-option>
+      <mat-option [value]="false">Insecure (HTTP)</mat-option>
+    </mat-select>
+  </mat-form-field>
+</div>
+
+<div mat-dialog-actions align="end">
+  <button mat-button type="button" (click)="cancel()">Cancel</button>
+  <button mat-flat-button color="primary" type="button" (click)="confirm()">OK</button>
+</div>
