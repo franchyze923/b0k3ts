@@ -1,35 +1,8 @@
 @use '@angular/material' as mat;
 
-/* Global theming (light/dark) via CSS variables */
-:root {
-  color-scheme: light;
 
-  --bg: #f6f7fb;
-  --surface: #ffffff;
-  --border: #e6e8f0;
 
-  --text: #111318;
-  --muted: #5b6270;
 
-  --btn-bg: #111318;
-  --btn-text: #ffffff;
-  --btn-border: #111318;
-}
-
-:root[data-theme='dark'] {
-  color-scheme: dark;
-
-  --bg: #0b0c10;
-  --surface: #111218;
-  --border: #232531;
-
-  --text: #e8e8e8;
-  --muted: #b8bcc8;
-
-  --btn-bg: #1a1c25;
-  --btn-text: #ffffff;
-  --btn-border: #2e3140;
-}
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme]) {
@@ -89,11 +62,37 @@ $dark-theme: mat.define-theme(
   @include mat.list-base((
     list-item-container-shape: 5px, // global list-item radius
 
-  ))
+  ));
+
+  color-scheme: light;
+
+  --bg: #f6f7fb;
+  --surface: #ffffff;
+  --border: #e6e8f0;
+
+  --text: #111318;
+  --muted: #5b6270;
+
+  --btn-bg: #111318;
+  --btn-text: #ffffff;
+  --btn-border: #111318;
 
 }
 
 :root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --bg: #0b0c10;
+  --surface: #111218;
+  --border: #232531;
+
+  --text: #e8e8e8;
+  --muted: #b8bcc8;
+
+  --btn-bg: #1a1c25;
+  --btn-text: #ffffff;
+  --btn-border: #2e3140;
+
   @include mat.all-component-colors($dark-theme);
   @include mat.button-base((
     filled-container-shape: 5px,

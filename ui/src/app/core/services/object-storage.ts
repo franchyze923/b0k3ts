@@ -165,7 +165,6 @@ export class ObjectStorageService {
       const completedParts: MultipartCompletedPart[] = [];
 
       // Track aggregate progress across parts
-      const baseUploadedByCompletedParts: number[] = [];
       let uploadedCompletedBytes = 0;
 
       for (let partNumber = 1; partNumber <= partCount; partNumber++) {
@@ -181,8 +180,6 @@ export class ObjectStorageService {
           part_number: partNumber,
           expires_seconds: params.presignExpiresSeconds,
         });
-
-        let lastLoadedForPart = 0;
 
         let resp: HttpResponse<string>;
         try {
@@ -202,7 +199,6 @@ export class ObjectStorageService {
                 filter((event: HttpEvent<string>) => {
                   if (event.type === HttpEventType.UploadProgress) {
                     const loaded = Math.min(event.loaded ?? 0, partSize);
-                    lastLoadedForPart = loaded;
 
                     const uploadedBytes = Math.min(uploadedCompletedBytes + loaded, totalSize);
                     const totalBytes = totalSize;
@@ -240,7 +236,6 @@ export class ObjectStorageService {
 
         // Mark this part as fully uploaded in our aggregate tracking
         uploadedCompletedBytes += partSize;
-        baseUploadedByCompletedParts.push(partSize);
 
         // Emit a "part finished" progress tick (helps UI snap to clean boundaries)
         const uploadedBytes = Math.min(uploadedCompletedBytes, totalSize);
@@ -372,7 +367,15 @@ export class ObjectStorageService {
   }): Promise<{
     destinationKey: string;
   }> {
-    const fileName = params.sourceKey.split('/').filter(Boolean).pop() ?? params.sourceKey;
+    const parts = params.sourceKey.split('/');
+    let fileName = params.sourceKey;
+    for (let i = parts.length - 1; i >= 0; i--) {
+      const p = parts[i];
+      if (p) {
+        fileName = p;
+        break;
+      }
+    }
 
     // Avoid regex (linear-time scans only)
     const p = params.destinationPrefix.trim();

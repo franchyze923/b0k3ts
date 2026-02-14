@@ -185,12 +185,17 @@ export class ObjectManager implements OnInit {
     };
 
     const ensureDir = (children: TreeNode[], name: string, path: string) => {
-      let dir = children.find((c) => c.kind === 'dir' && c.name === name) as TreeNode | undefined;
+      const isDirNamed = (c: TreeNode): c is Extract<TreeNode, { kind: 'dir'; name: string }> =>
+        c.kind === 'dir' && c.name === name;
+
+      let dir = children.find(isDirNamed);
+
       if (!dir) {
         dir = { kind: 'dir', name, path, children: [] };
         children.push(dir);
       }
-      return dir as Extract<TreeNode, { kind: 'dir' }>;
+
+      return dir;
     };
 
     for (const obj of objects) {
@@ -325,12 +330,13 @@ export class ObjectManager implements OnInit {
     this.buckets.set(bucketNames);
 
     const current = this.selectedBucket();
-    const next =
-      current && bucketNames.includes(current)
-        ? current
-        : bucketNames.length > 0
-          ? bucketNames[0]
-          : '';
+
+    let next = '';
+    if (current && bucketNames.includes(current)) {
+      next = current;
+    } else if (bucketNames.length > 0) {
+      next = bucketNames[0];
+    }
 
     this.selectedBucket.set(next);
 
@@ -452,7 +458,7 @@ export class ObjectManager implements OnInit {
 
     const clean = key.slice(0, end);
     const parts = clean.split('/');
-    return parts[parts.length - 1] || 'download';
+    return parts.at(-1) || 'download';
   }
 
   async downloadObject(obj: BucketObject): Promise<void> {

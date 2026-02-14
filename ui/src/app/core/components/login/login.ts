@@ -41,7 +41,7 @@ export class Login implements OnInit {
       const { registrationUrl } = await this.auth.startLogin();
 
       // Automatically go to registration (no button shown to the user)
-      window.location.assign(registrationUrl);
+      globalThis.location.assign(registrationUrl);
     } catch {
       this.state.set('error');
       this.message.set('Could not start login. Please try again.');
@@ -84,7 +84,7 @@ export class Login implements OnInit {
 
       // Redirect flow (OIDC-like)
       if (registrationUrl) {
-        window.location.assign(registrationUrl);
+        globalThis.location.assign(registrationUrl);
         return;
       }
 

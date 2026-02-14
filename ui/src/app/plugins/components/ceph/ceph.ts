@@ -143,7 +143,7 @@ export class Ceph implements OnInit {
   }
 
   private promptForEndpoint(bucketLabel: string): string | null {
-    const raw = window.prompt(
+    const raw = globalThis.prompt(
       `Endpoint is missing for "${bucketLabel}".\n\nEnter S3 endpoint (example: s3.example.com:80):`,
       '',
     );
@@ -374,12 +374,15 @@ export class Ceph implements OnInit {
     const location =
       String((creds as any)?.location ?? (creds as any)?.region ?? '').trim() || 'us-east-1';
 
-    const secure =
-      typeof secureOverride === 'boolean'
-        ? secureOverride
-        : typeof (creds as any)?.secure === 'boolean'
-          ? ((creds as any).secure as boolean)
-          : this.inferSecureFromEndpoint(endpoint);
+    const secureFromCreds = (creds as any)?.secure as unknown;
+    let secure: boolean;
+    if (typeof secureOverride === 'boolean') {
+      secure = secureOverride;
+    } else if (typeof secureFromCreds === 'boolean') {
+      secure = secureFromCreds;
+    } else {
+      secure = this.inferSecureFromEndpoint(endpoint);
+    }
 
     const authorized_users = currentUserEmail ? [currentUserEmail] : [];
     const authorized_groups: string[] = [];
@@ -546,7 +549,7 @@ export class Ceph implements OnInit {
         panelClass: 'ceph-creds-dialog-panel',
       });
 
-      window.setTimeout(() => ref.close(), 20000);
+      globalThis.setTimeout(() => ref.close(), 20000);
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Failed to get credentials';
       this.snack.open(msg, 'Dismiss', { duration: 4000 });

@@ -4,19 +4,17 @@ WORKDIR /app
 
 COPY . .
 
-RUN npm install --skip-confirmation
+RUN npm install --skip-confirmation &&  \
+    npm install -g @angular/cli --skip-confirmation &&  \
+    npm install -g gzipper --skip-confirmation &&  \
+    ng build --aot &&  \
+    gzipper compress ./dist
 
-RUN npm install -g @angular/cli --skip-confirmation
 
-RUN npm install -g gzipper --skip-confirmation
-
-RUN ng build --aot && gzipper compress ./dist
 
 FROM nginx:alpine
 
-RUN apk update  && apk upgrade
-
-RUN rm /etc/nginx/conf.d/default.conf
+RUN apk update  && apk upgrade && rm /etc/nginx/conf.d/default.conf
 
 COPY build/default.conf /etc/nginx/conf.d/default.conf
 

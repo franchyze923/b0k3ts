@@ -88,7 +88,7 @@ export class Kubernetes implements OnInit {
   async deleteKubeconfig(name: string): Promise<void> {
     if (this.deletingName()) return;
 
-    const ok = window.confirm(`Delete kubeconfig "${name}"?`);
+    const ok = globalThis.confirm(`Delete kubeconfig "${name}"?`);
     if (!ok) return;
 
     try {

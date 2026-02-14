@@ -11,6 +11,7 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 
 import { LocalUsersService, LocalUserSafe } from '../../../services/localuser';
+import { firstValueFrom } from 'rxjs';
 
 type Draft = {
   username: string;
@@ -101,7 +102,7 @@ export class Users {
     this.error.set(null);
     this.loading.set(true);
     try {
-      const u = await this.api.get(username).toPromise();
+      const u = await firstValueFrom(this.api.get(username));
       if (u) this.upsertUser(u);
     } catch (e: any) {
       this.error.set(e?.error?.message ?? e?.message ?? 'Failed to lookup user.');
@@ -117,7 +118,7 @@ export class Users {
     this.error.set(null);
     this.loading.set(true);
     try {
-      const res = await this.api.exists(username).toPromise();
+      const res = await firstValueFrom(this.api.exists(username));
       if (!res?.exists) this.error.set('User does not exist.');
       if (res?.exists) {
         // Existence confirmed; fetch safe record so the table stays accurate.
@@ -143,7 +144,7 @@ export class Users {
     this.error.set(null);
     this.working.set(true);
     try {
-      await this.api.create(username, d.password, d.administrator).toPromise();
+      await firstValueFrom(this.api.create(username, d.password, d.administrator));
       await this.lookup(); // refresh safe fields into the table
       this.draft.set({ ...this.draft(), password: '', password2: '' });
     } catch (e: any) {
@@ -163,7 +164,7 @@ export class Users {
     this.error.set(null);
     this.working.set(true);
     try {
-      await this.api.updatePassword(username, d.password).toPromise();
+      await firstValueFrom(this.api.updatePassword(username, d.password));
       this.draft.set({ ...this.draft(), password: '', password2: '' });
     } catch (e: any) {
       this.error.set(e?.error?.message ?? e?.message ?? 'Failed to update password.');
@@ -180,7 +181,7 @@ export class Users {
     this.error.set(null);
     this.working.set(true);
     try {
-      await this.api.disable(username, disabled).toPromise();
+      await firstValueFrom(this.api.disable(username, disabled));
       // optimistic UI update
       const existing = this.users().find((u) => u.username === username);
       if (existing) this.upsertUser({ ...existing, disabled });
@@ -200,7 +201,7 @@ export class Users {
     this.error.set(null);
     this.working.set(true);
     try {
-      await this.api.delete(username).toPromise();
+      await firstValueFrom(this.api.delete(username));
       this.users.set(this.users().filter((u) => u.username !== username));
     } catch (e: any) {
       this.error.set(e?.error?.message ?? e?.message ?? 'Failed to delete user.');

@@ -1,11 +1,11 @@
 import { Injectable } from '@angular/core';
-import {BehaviorSubject} from 'rxjs';
+import { BehaviorSubject } from 'rxjs';
 
 @Injectable({
   providedIn: 'root',
 })
 export class GlobalService {
-  private textSource = new BehaviorSubject<string>('B0K3TS');
+  readonly textSource = new BehaviorSubject<string>('B0K3TS');
   currentTitle = this.textSource.asObservable();
 
   updateTitle(newText: string) {

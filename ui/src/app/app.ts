@@ -116,7 +116,7 @@ export class App implements OnInit {
 
     const inAdminsGroup =
       groups.some((g) => (typeof g === 'string' ? g : (g as any)?.name) === '/Admins') ||
-      roles.some((r) => r === 'Admins');
+      roles.includes((r: string) => r === 'Admins');
 
     return administrator || inAdminsGroup;
   }

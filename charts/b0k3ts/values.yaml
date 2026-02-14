@@ -7,11 +7,11 @@ server:
 
 image:
   server:
-    repository: harbor.cyberneticks.com/library/b0k3ts-server
+    repository: apexfalcn/b0k3ts-server
     tag: v0.0.1
     pullPolicy: Always
   ui:
-    repository: harbor.cyberneticks.com/library/b0k3ts-ui
+    repository: apexfalcn/b0k3ts-ui
     tag: v0.0.1
     pullPolicy: Always
 

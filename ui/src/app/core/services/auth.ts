@@ -44,7 +44,7 @@ export class Auth {
   }
 
   async startLogin(): Promise<{ registrationUrl: string }> {
-    const redirectUri = new URL('/oidc/callback', window.location.origin).toString();
+    const redirectUri = new URL('/oidc/callback', globalThis.location.origin).toString();
 
     const state = this.generateToken(32);
     sessionStorage.setItem(this.storageStateKey, state);
@@ -76,7 +76,7 @@ export class Auth {
   async startLocalLogin(
     req: LocalLoginRequest,
   ): Promise<{ registrationUrl?: string; token?: string }> {
-    const redirectUri = new URL('/local/callback', window.location.origin).toString();
+    const redirectUri = new URL('/local/callback', globalThis.location.origin).toString();
 
     const state = this.generateToken(32);
     sessionStorage.setItem(this.storageStateKey, state);

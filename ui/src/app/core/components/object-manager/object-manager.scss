@@ -92,7 +92,8 @@
   margin-top: 12px;
   border: 1px solid var(--border);
   border-radius: 12px;
-  overflow: hidden;
+  padding: 6px 0;
+  overflow: auto;
 
 }
 
@@ -108,8 +109,6 @@
 
 .explorer {
   display: grid;
-
-  //grid-template-columns: 320px 1fr;
   gap: 12px;
   align-items: stretch;
 }
@@ -131,11 +130,7 @@
   border-bottom: 1px solid rgba(0, 0, 0, 0.08);
 }
 
-.tree-wrap {
 
-  padding: 6px 0;
-  overflow: auto;
-}
 
 .folder-row {
 

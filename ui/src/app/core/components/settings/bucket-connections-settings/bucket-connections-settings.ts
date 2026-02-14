@@ -70,7 +70,6 @@ export class BucketConnectionsSettings implements OnInit {
     'actions',
   ] as const;
 
-  // Chips / autocomplete state
   readonly userChipInput = signal<string>('');
   readonly groupChipInput = signal<string>('');
 
@@ -98,9 +97,7 @@ export class BucketConnectionsSettings implements OnInit {
     return this.allKnownGroups().filter((g) => g.toLowerCase().includes(q));
   });
 
-  constructor() {
-    // this.global.updateTitle('Settings · Bucket Connections');
-  }
+  constructor() {}
 
   ngOnInit() {
     queueMicrotask(() => this.global.updateTitle('Settings · Bucket Connections'));
