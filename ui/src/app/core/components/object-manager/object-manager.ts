@@ -392,7 +392,7 @@ export class ObjectManager implements OnInit {
     // Create tasks up-front so UI shows a queue immediately
     const tasks: UploadTask[] = Array.from(files).map((file) => {
       const key = `${prefix}${file.name}`;
-      const id = `${Date.now()}-${crypto.randomUUID()}-${key}`;
+      const id = `${Date.now()}-${this.uuid()}-${key}`;
       return {
         id,
         fileName: file.name,
@@ -410,7 +410,7 @@ export class ObjectManager implements OnInit {
     for (const file of Array.from(files)) {
       const key = `${prefix}${file.name}`;
       const task = this.uploadTasks().find((t) => t.key === key && t.totalBytes === file.size);
-      const id = task?.id ?? `${Date.now()}-${crypto.randomUUID()}-${key}`;
+      const id = task?.id ?? `${Date.now()}-${this.uuid()}-${key}`;
 
       this.updateUploadTask(id, { status: 'uploading', errorMessage: undefined });
 
@@ -512,5 +512,35 @@ export class ObjectManager implements OnInit {
     if (kb < 1024) return `${kb.toFixed(1)} KB`;
     const mb = kb / 1024;
     return `${mb.toFixed(1)} MB`;
+  }
+
+  private uuid(): string {
+    const c = globalThis.crypto as Crypto | undefined;
+
+    // Preferred (when supported)
+    if (c?.randomUUID) return c.randomUUID();
+
+    // Fallback: RFC 4122 v4 using getRandomValues
+    if (!c?.getRandomValues) {
+      // Last-resort fallback: not cryptographically strong, but avoids crashes
+      // (You can choose to throw instead if strong IDs are required.)
+      return `${Date.now()}-${Math.random().toString(16).slice(2)}-${Math.random()
+        .toString(16)
+        .slice(2)}`;
+    }
+
+    const bytes = new Uint8Array(16);
+    c.getRandomValues(bytes);
+
+    // Set version to 4
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    // Set variant to RFC 4122
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+
+    const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(
+      16,
+      20,
+    )}-${hex.slice(20)}`;
   }
 }

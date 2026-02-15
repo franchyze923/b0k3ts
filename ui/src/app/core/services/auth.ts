@@ -34,6 +34,7 @@ export class Auth {
 
   private readonly storageTokenKey = 'oidc.token';
   private readonly storageStateKey = 'oidc.state';
+  private readonly storageAuthHintKey = 'auth.hint'; // 'oidc' | 'local'
 
   constructor(private readonly http: HttpClient) {}
 
@@ -116,9 +117,35 @@ export class Auth {
   }
 
   async authenticateAny(token?: string): Promise<AuthenticateResponse> {
-    const local = await this.authenticateLocal(token);
-    if (local.authenticated) return local;
-    return await this.authenticate(token);
+    const t = token ?? this.getToken();
+    if (!t) return { authenticated: false, user_info: null };
+
+    // 1) Prefer what succeeded previously to avoid “probing” 401s
+    const hint = this.getAuthHint();
+    if (hint === 'oidc') {
+      const oidc = await this.authenticate(t);
+      if (oidc.authenticated) return oidc;
+      const local = await this.authenticateLocal(t);
+      return local;
+    }
+    if (hint === 'local') {
+      const local = await this.authenticateLocal(t);
+      if (local.authenticated) return local;
+      const oidc = await this.authenticate(t);
+      return oidc;
+    }
+
+    // 2) No hint yet: try to guess once, then fall back
+    const order = this.guessAuthOrderFromToken(t);
+    if (order === 'oidc-first') {
+      const oidc = await this.authenticate(t);
+      if (oidc.authenticated) return oidc;
+      return await this.authenticateLocal(t);
+    } else {
+      const local = await this.authenticateLocal(t);
+      if (local.authenticated) return local;
+      return await this.authenticate(t);
+    }
   }
 
   setToken(token: string): void {
@@ -132,6 +159,7 @@ export class Auth {
   clearToken(): void {
     sessionStorage.removeItem(this.storageTokenKey);
     sessionStorage.removeItem(this.storageStateKey);
+    sessionStorage.removeItem(this.storageAuthHintKey);
   }
 
   async authenticate(token?: string): Promise<AuthenticateResponse> {
@@ -142,7 +170,9 @@ export class Auth {
     const headers = new HttpHeaders({ Authorization: `${t}` });
 
     try {
-      return await firstValueFrom(this.http.post<AuthenticateResponse>(url, {}, { headers }));
+      const res = await firstValueFrom(this.http.post<AuthenticateResponse>(url, {}, { headers }));
+      if (res.authenticated) this.setAuthHint('oidc');
+      return res;
     } catch {
       return { authenticated: false, user_info: null };
     }
@@ -156,10 +186,49 @@ export class Auth {
     const headers = new HttpHeaders({ Authorization: `Bearer ${t}` });
 
     try {
-      return await firstValueFrom(this.http.post<AuthenticateResponse>(url, {}, { headers }));
+      const res = await firstValueFrom(this.http.post<AuthenticateResponse>(url, {}, { headers }));
+      if (res.authenticated) this.setAuthHint('local');
+      return res;
     } catch {
       return { authenticated: false, user_info: null };
     }
+  }
+
+  private setAuthHint(hint: 'oidc' | 'local'): void {
+    sessionStorage.setItem(this.storageAuthHintKey, hint);
+  }
+
+  private getAuthHint(): 'oidc' | 'local' | null {
+    const v = sessionStorage.getItem(this.storageAuthHintKey);
+    return v === 'oidc' || v === 'local' ? v : null;
+  }
+
+  private guessAuthOrderFromToken(token: string): 'oidc-first' | 'local-first' {
+    // Heuristic: JWT-ish tokens are more likely to be OIDC.
+    // (Doesn’t verify signature; just reduces unnecessary probes on first run.)
+    const parts = token.split('.');
+    if (parts.length !== 3) return 'local-first';
+
+    try {
+      const payloadJson = this.base64UrlDecodeToString(parts[1]);
+      const payload = JSON.parse(payloadJson) as Record<string, unknown>;
+      if (
+        typeof payload['iss'] === 'string' ||
+        typeof payload['aud'] === 'string' ||
+        Array.isArray(payload['aud'])
+      ) {
+        return 'oidc-first';
+      }
+      return 'oidc-first'; // still JWT-looking
+    } catch {
+      return 'local-first';
+    }
+  }
+
+  private base64UrlDecodeToString(b64url: string): string {
+    const padLen = (4 - (b64url.length % 4)) % 4;
+    const padded = b64url.replaceAll('-', '+').replaceAll('_', '/') + '='.repeat(padLen);
+    return atob(padded);
   }
 
   private base64UrlEncode(bytes: Uint8Array): string {
