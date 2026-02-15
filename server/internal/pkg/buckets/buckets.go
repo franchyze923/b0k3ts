@@ -26,6 +26,9 @@ import (
 	"github.com/samber/lo"
 )
 
+const OctetStream = "application/octet-stream"
+const BucketIdPrefix = "bucket-"
+
 type PresignDownloadRequest struct {
 	Bucket         string `json:"bucket"`                    // bucket connection id
 	Key            string `json:"key"`                       // object key/path in the bucket
@@ -122,7 +125,7 @@ func normalizePrefix(p string) string {
 func (app *App) PresignDownload(c *gin.Context) {
 	var req PresignDownloadRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		slog.Error("failed to bind json", "err", err)
+		slog.Error("presign download failed. failed to bind json", "err", err)
 		c.JSON(400, gin.H{"error": err.Error()})
 		return
 	}
@@ -168,7 +171,7 @@ func (app *App) PresignDownload(c *gin.Context) {
 
 	q := make(url.Values, 2)
 	q.Set("response-content-disposition", fmt.Sprintf("%s; filename=%q", disp, filename))
-	q.Set("response-content-type", "application/octet-stream")
+	q.Set("response-content-type", OctetStream)
 
 	ctx := context.Background()
 	u, err := mio.Presign(ctx, http.MethodGet, bucketConfig.BucketName, req.Key, time.Duration(expires)*time.Second, q)
@@ -180,11 +183,10 @@ func (app *App) PresignDownload(c *gin.Context) {
 
 	c.JSON(200, PresignDownloadResponse{URL: u.String()})
 }
+
 func (app *App) Move(c *gin.Context) {
-	var req ObjectMoveRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		slog.Error("failed to bind json", "err", err)
-		c.JSON(400, gin.H{"error": err.Error()})
+	req, ok := bindMoveRequest(c)
+	if !ok {
 		return
 	}
 
@@ -203,121 +205,203 @@ func (app *App) Move(c *gin.Context) {
 	ctx := context.Background()
 
 	// Determine mode: single-object move vs prefix move.
-	if req.FromKey != "" || req.ToKey != "" {
-		if req.FromKey == "" || req.ToKey == "" {
-			c.JSON(400, gin.H{"error": "from_key and to_key are required for single object move"})
+	if isSingleObjectMove(req) {
+		if err := moveSingleObject(ctx, mio, bucketConfig.BucketName, req); err != nil {
+			respondMoveError(c, err)
 			return
 		}
-		if req.FromKey == req.ToKey {
-			c.JSON(400, gin.H{"error": "from_key and to_key must be different"})
-			return
-		}
-
-		// If not overwriting, check destination doesn't exist.
-		if !req.Overwrite {
-			_, err := mio.StatObject(ctx, bucketConfig.BucketName, req.ToKey, minio.StatObjectOptions{})
-			if err == nil {
-				c.JSON(409, gin.H{"error": "destination object already exists"})
-				return
-			}
-		}
-
-		src := minio.CopySrcOptions{
-			Bucket: bucketConfig.BucketName,
-			Object: req.FromKey,
-		}
-		dst := minio.CopyDestOptions{
-			Bucket: bucketConfig.BucketName,
-			Object: req.ToKey,
-		}
-
-		if _, err := mio.CopyObject(ctx, dst, src); err != nil {
-			slog.Error("failed to copy object", "err", err)
-			c.JSON(400, gin.H{"error": err.Error()})
-			return
-		}
-
-		if err := mio.RemoveObject(ctx, bucketConfig.BucketName, req.FromKey, minio.RemoveObjectOptions{}); err != nil {
-			slog.Error("failed to delete source object after copy", "err", err)
-			c.JSON(400, gin.H{"error": err.Error()})
-			return
-		}
-
 		c.JSON(200, ObjectMoveResponse{Moved: 1})
 		return
 	}
 
-	fromPrefix := normalizePrefix(req.FromPrefix)
-	toPrefix := normalizePrefix(req.ToPrefix)
-
-	if fromPrefix == "" || toPrefix == "" {
-		c.JSON(400, gin.H{"error": "either (from_key,to_key) or (from_prefix,to_prefix) must be provided"})
+	moved, err := moveByPrefix(ctx, mio, bucketConfig.BucketName, req)
+	if err != nil {
+		respondMoveError(c, err)
 		return
 	}
-	if fromPrefix == toPrefix {
-		c.JSON(400, gin.H{"error": "from_prefix and to_prefix must be different"})
-		return
+	c.JSON(200, ObjectMoveResponse{Moved: moved})
+}
+
+func bindMoveRequest(c *gin.Context) (ObjectMoveRequest, bool) {
+	var req ObjectMoveRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		slog.Error("move failed. failed to bind json", "err", err)
+		c.JSON(400, gin.H{"error": err.Error()})
+		return ObjectMoveRequest{}, false
+	}
+	return req, true
+}
+
+func isSingleObjectMove(req ObjectMoveRequest) bool {
+	return req.FromKey != "" || req.ToKey != ""
+}
+
+func moveSingleObject(ctx context.Context, mio *minio.Client, bucketName string, req ObjectMoveRequest) error {
+	if req.FromKey == "" || req.ToKey == "" {
+		return httpError{status: 400, msg: "from_key and to_key are required for single object move"}
+	}
+	if req.FromKey == req.ToKey {
+		return httpError{status: 400, msg: "from_key and to_key must be different"}
 	}
 
-	// Move all objects under fromPrefix to toPrefix (server-side copy+delete).
-	moved := 0
+	if err := ensureDestinationAbsent(ctx, mio, bucketName, req.ToKey, req.Overwrite); err != nil {
+		return err
+	}
 
-	ch := mio.ListObjects(ctx, bucketConfig.BucketName, minio.ListObjectsOptions{
+	return copyAndDelete(ctx, mio, bucketName, req.FromKey, req.ToKey,
+		"failed to copy object",
+		"failed to delete source object after copy",
+	)
+}
+
+func moveByPrefix(ctx context.Context, mio *minio.Client, bucketName string, req ObjectMoveRequest) (int, error) {
+	fromPrefix, toPrefix, err := validatePrefixMove(req)
+	if err != nil {
+		return 0, err
+	}
+
+	ch := mio.ListObjects(ctx, bucketName, minio.ListObjectsOptions{
 		Prefix:    fromPrefix,
 		Recursive: true,
 	})
 
+	moved := 0
 	for obj := range ch {
-		if obj.Err != nil {
-			slog.Error("failed to list objects for move", "err", obj.Err)
-			c.JSON(400, gin.H{"error": obj.Err.Error()})
-			return
+		if err := obj.Err; err != nil {
+			slog.Error("failed to list objects for move", "err", err)
+			return moved, httpError{status: 400, msg: err.Error()}
 		}
 
-		rel := strings.TrimPrefix(obj.Key, fromPrefix)
-		if rel == "" {
-			// Shouldn't happen for real objects, but keep it safe.
-			continue
+		n, err := moveOnePrefixObject(ctx, mio, bucketName, req, fromPrefix, toPrefix, obj.Key)
+		if err != nil {
+			return moved, err
 		}
-		newKey := toPrefix + rel
-
-		if !req.Overwrite {
-			_, err := mio.StatObject(ctx, bucketConfig.BucketName, newKey, minio.StatObjectOptions{})
-			if err == nil {
-				c.JSON(409, gin.H{
-					"error":   "destination object already exists",
-					"object":  newKey,
-					"message": "set overwrite=true to replace existing objects",
-				})
-				return
-			}
-		}
-
-		src := minio.CopySrcOptions{
-			Bucket: bucketConfig.BucketName,
-			Object: obj.Key,
-		}
-		dst := minio.CopyDestOptions{
-			Bucket: bucketConfig.BucketName,
-			Object: newKey,
-		}
-
-		if _, err := mio.CopyObject(ctx, dst, src); err != nil {
-			slog.Error("failed to copy object during prefix move", "from", obj.Key, "to", newKey, "err", err)
-			c.JSON(400, gin.H{"error": err.Error(), "from": obj.Key, "to": newKey})
-			return
-		}
-
-		if err := mio.RemoveObject(ctx, bucketConfig.BucketName, obj.Key, minio.RemoveObjectOptions{}); err != nil {
-			slog.Error("failed to delete source object during prefix move", "key", obj.Key, "err", err)
-			c.JSON(400, gin.H{"error": err.Error(), "key": obj.Key})
-			return
-		}
-
-		moved++
+		moved += n
 	}
 
-	c.JSON(200, ObjectMoveResponse{Moved: moved})
+	return moved, nil
+}
+
+func validatePrefixMove(req ObjectMoveRequest) (fromPrefix, toPrefix string, err error) {
+	fromPrefix = normalizePrefix(req.FromPrefix)
+	toPrefix = normalizePrefix(req.ToPrefix)
+
+	if fromPrefix == "" || toPrefix == "" {
+		return "", "", httpError{status: 400, msg: "either (from_key,to_key) or (from_prefix,to_prefix) must be provided"}
+	}
+	if fromPrefix == toPrefix {
+		return "", "", httpError{status: 400, msg: "from_prefix and to_prefix must be different"}
+	}
+	return fromPrefix, toPrefix, nil
+}
+
+func moveOnePrefixObject(
+	ctx context.Context,
+	mio *minio.Client,
+	bucketName string,
+	req ObjectMoveRequest,
+	fromPrefix, toPrefix, fromKey string,
+) (int, error) {
+	rel := strings.TrimPrefix(fromKey, fromPrefix)
+	if rel == "" {
+		// Shouldn't happen for real objects, but keep it safe.
+		return 0, nil
+	}
+
+	newKey := toPrefix + rel
+
+	if err := ensureDestinationAbsent(ctx, mio, bucketName, newKey, req.Overwrite); err != nil {
+		return 0, prefixMoveConflictOrErr(err, newKey)
+	}
+
+	if err := copyAndDelete(ctx, mio, bucketName, fromKey, newKey,
+		"failed to copy object during prefix move",
+		"failed to delete source object during prefix move",
+	); err != nil {
+		return 0, withMoveKeys(err, fromKey, newKey)
+	}
+
+	return 1, nil
+}
+
+func prefixMoveConflictOrErr(err error, newKey string) error {
+	he, ok := err.(httpError)
+	if !ok || he.status != 409 {
+		return err
+	}
+	return httpError{
+		status: 409,
+		body: gin.H{
+			"error":   "destination object already exists",
+			"object":  newKey,
+			"message": "set overwrite=true to replace existing objects",
+		},
+	}
+}
+
+func withMoveKeys(err error, fromKey, toKey string) error {
+	he, ok := err.(httpError)
+	if !ok || he.status != 400 {
+		return err
+	}
+	// Preserve earlier behavior: include from/to for easier debugging.
+	if he.body == nil {
+		he.body = gin.H{"error": he.msg, "from": fromKey, "to": toKey}
+	}
+	return he
+}
+
+func ensureDestinationAbsent(ctx context.Context, mio *minio.Client, bucketName, key string, overwrite bool) error {
+	if overwrite {
+		return nil
+	}
+	_, err := mio.StatObject(ctx, bucketName, key, minio.StatObjectOptions{})
+	if err == nil {
+		return httpError{status: 409, msg: "destination object already exists"}
+	}
+	return nil
+}
+
+func copyAndDelete(
+	ctx context.Context,
+	mio *minio.Client,
+	bucketName, fromKey, toKey string,
+	copyLogMsg, deleteLogMsg string,
+) error {
+	src := minio.CopySrcOptions{Bucket: bucketName, Object: fromKey}
+	dst := minio.CopyDestOptions{Bucket: bucketName, Object: toKey}
+
+	if _, err := mio.CopyObject(ctx, dst, src); err != nil {
+		slog.Error(copyLogMsg, "err", err)
+		return httpError{status: 400, msg: err.Error()}
+	}
+
+	if err := mio.RemoveObject(ctx, bucketName, fromKey, minio.RemoveObjectOptions{}); err != nil {
+		slog.Error(deleteLogMsg, "err", err)
+		return httpError{status: 400, msg: err.Error()}
+	}
+
+	return nil
+}
+
+type httpError struct {
+	status int
+	msg    string
+	body   gin.H
+}
+
+func (e httpError) Error() string { return e.msg }
+
+func respondMoveError(c *gin.Context, err error) {
+	if he, ok := err.(httpError); ok {
+		if he.body != nil {
+			c.JSON(he.status, he.body)
+			return
+		}
+		c.JSON(he.status, gin.H{"error": he.msg})
+		return
+	}
+	c.JSON(400, gin.H{"error": err.Error()})
 }
 
 func (app *App) MultipartInitiate(c *gin.Context) {
@@ -326,7 +410,7 @@ func (app *App) MultipartInitiate(c *gin.Context) {
 
 	var req MultipartInitiateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		slog.Error("failed to bind json", "err", err)
+		slog.Error("multipart initiate failed. failed to bind json", "err", err)
 		c.JSON(400, gin.H{"error": err.Error()})
 		return
 	}
@@ -366,7 +450,7 @@ func (app *App) MultipartInitiate(c *gin.Context) {
 
 	contentType := req.ContentType
 	if contentType == "" {
-		contentType = "application/octet-stream"
+		contentType = OctetStream
 	}
 
 	uploadID, err := core.NewMultipartUpload(ctx, bucketConfig.BucketName, req.Key, minio.PutObjectOptions{
@@ -388,12 +472,12 @@ func (app *App) MultipartInitiate(c *gin.Context) {
 func (app *App) MultipartPresignPart(c *gin.Context) {
 	var req MultipartPresignPartRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		slog.Error("failed to bind json", "err", err)
+		slog.Error("multipart presign part failed. failed to bind json", "err", err)
 		c.JSON(400, gin.H{"error": err.Error()})
 		return
 	}
 	if req.Key == "" || req.UploadID == "" {
-		c.JSON(400, gin.H{"error": "key and upload_id are required"})
+		c.JSON(400, gin.H{"error": "multipart presign failed. key and upload_id are required"})
 		return
 	}
 	if req.PartNumber < 1 || req.PartNumber > 10000 {
@@ -441,12 +525,12 @@ func (app *App) MultipartPresignPart(c *gin.Context) {
 func (app *App) MultipartComplete(c *gin.Context) {
 	var req MultipartCompleteRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		slog.Error("failed to bind json", "err", err)
+		slog.Error("multipart complete failed. failed to bind json", "err", err)
 		c.JSON(400, gin.H{"error": err.Error()})
 		return
 	}
 	if req.Key == "" || req.UploadID == "" {
-		c.JSON(400, gin.H{"error": "key and upload_id are required"})
+		c.JSON(400, gin.H{"error": "multipart complete failed. key and upload_id are required"})
 		return
 	}
 	if len(req.Parts) == 0 {
@@ -494,12 +578,12 @@ func (app *App) MultipartComplete(c *gin.Context) {
 func (app *App) MultipartAbort(c *gin.Context) {
 	var req MultipartAbortRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		slog.Error("failed to bind json", "err", err)
+		slog.Error("multipart abort failed. failed to bind json", "err", err)
 		c.JSON(400, gin.H{"error": err.Error()})
 		return
 	}
 	if req.Key == "" || req.UploadID == "" {
-		c.JSON(400, gin.H{"error": "key and upload_id are required"})
+		c.JSON(400, gin.H{"error": "multipart abort failed. key and upload_id are required"})
 		return
 	}
 
@@ -612,145 +696,147 @@ func scanByPrefix(db *badger.DB, prefixStr string) [][]byte {
 }
 
 func (app *App) DeleteConnection(c *gin.Context) {
-
-	// Getting User ID from JWT Token
-	//
-	userInfo, _ := auth.TokenToUserData(c.GetHeader("Authorization"))
-
-	if userInfo.Email == "" {
-		slog.Error("failed to get token id")
-		c.JSON(400, gin.H{"error": "failed to get token id"})
+	userInfo, ok := tokenUserOrRespond(c)
+	if !ok {
 		return
 	}
 
-	// Obtaining New Bucket Config From User
-	//
-	var req BucketDeleteRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		slog.Error("failed to bind json: ", err)
-		c.JSON(400, gin.H{"error": err.Error()})
+	req, ok := bindDeleteConnectionRequest(c)
+	if !ok {
 		return
 	}
 
-	// Creating Bucket Instance Connection for User
-	//
-	res, err := badgerDB.PullKV(app.DB, "bucket-"+req.BucketId)
-	if err != nil {
+	bucketConfig, ok := getBucketConfigOrRespond(c, app.DB, req.BucketId)
+	if !ok {
+		return
+	}
+
+	if !isAuthorizedForBucket(*app, userInfo, bucketConfig) {
+		// Preserve previous behavior: silently succeed even if not authorized.
+		c.JSON(200, gin.H{"message": "Bucket connection deleted successfully"})
+		return
+	}
+
+	if err := badgerDB.DeleteKV(app.DB, BucketIdPrefix+req.BucketId); err != nil {
 		slog.Error(err.Error())
 		c.JSON(400, gin.H{"error": err.Error()})
 		return
-	}
-
-	var bucketConfig BucketConfig
-
-	err = json.Unmarshal(res, &bucketConfig)
-	if err != nil {
-		slog.Error(err.Error())
-		c.JSON(400, gin.H{"error": err.Error()})
-		return
-	}
-
-	authorized := false
-	if userInfo.Administrator {
-		authorized = true
-	} else {
-		for _, user := range bucketConfig.AuthorizedUsers {
-			if user == userInfo.Email {
-				authorized = true
-				break
-			}
-		}
-
-		for _, user := range userInfo.Groups {
-			if user == app.OIDCConfig.AdminGroup {
-				authorized = true
-				break
-			}
-			for _, group := range bucketConfig.AuthorizedGroups {
-
-				if user == group {
-					authorized = true
-					break
-				}
-			}
-		}
-	}
-
-	if authorized {
-		err := badgerDB.DeleteKV(app.DB, "bucket-"+req.BucketId)
-		if err != nil {
-			slog.Error(err.Error())
-			c.JSON(400, gin.H{"error": err.Error()})
-			return
-		}
-
 	}
 
 	c.JSON(200, gin.H{"message": "Bucket connection deleted successfully"})
 }
 
-func (app *App) ListConnection(c *gin.Context) {
-
-	// Getting User ID from JWT Token
-	//
+func tokenUserOrRespond(c *gin.Context) (auth.User, bool) {
 	userInfo, _ := auth.TokenToUserData(c.GetHeader("Authorization"))
+	if strings.TrimSpace(userInfo.Email) == "" {
+		slog.Error("token user or response failed. failed to get token id")
+		c.JSON(400, gin.H{"error": "token user or response failed. failed to get token id"})
+		return auth.User{}, false
+	}
+	return userInfo, true
+}
 
-	if userInfo.Email == "" {
-		slog.Error("failed to get token id")
-		c.JSON(400, gin.H{"error": "failed to get token id"})
-		return
+func bindDeleteConnectionRequest(c *gin.Context) (BucketDeleteRequest, bool) {
+	var req BucketDeleteRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		slog.Error("delete connection failed. failed to bind json: ", err)
+		c.JSON(400, gin.H{"error": err.Error()})
+		return BucketDeleteRequest{}, false
+	}
+	return req, true
+}
+
+func getBucketConfigOrRespond(c *gin.Context, db *badger.DB, bucketID string) (BucketConfig, bool) {
+	res, err := badgerDB.PullKV(db, BucketIdPrefix+bucketID)
+	if err != nil {
+		slog.Error(err.Error())
+		c.JSON(400, gin.H{"error": err.Error()})
+		return BucketConfig{}, false
 	}
 
 	var bucketConfig BucketConfig
+	if err := json.Unmarshal(res, &bucketConfig); err != nil {
+		slog.Error(err.Error())
+		c.JSON(400, gin.H{"error": err.Error()})
+		return BucketConfig{}, false
+	}
 
-	var bucketConfigs []BucketConfig
+	return bucketConfig, true
+}
 
-	resP := scanByPrefix(app.DB, "bucket-")
+func isAuthorizedForBucket(app App, userInfo auth.User, bucketConfig BucketConfig) bool {
+	if userInfo.Administrator {
+		return true
+	}
 
-	for _, val := range resP {
-		err := json.Unmarshal(val, &bucketConfig)
-		if err != nil {
-			slog.Error(err.Error())
-			c.JSON(400, gin.H{"error": err.Error()})
-			return
-		}
-
-		authorized := false
-
-		if userInfo.Administrator {
-			authorized = true
-		} else {
-
-			for _, user := range bucketConfig.AuthorizedUsers {
-				if user == userInfo.Email {
-
-					authorized = true
-					break
-				}
-			}
-
-			for _, user := range userInfo.Groups {
-				if user == app.OIDCConfig.AdminGroup {
-					authorized = true
-					break
-				}
-				for _, group := range bucketConfig.AuthorizedGroups {
-					if user == group {
-						authorized = true
-						break
-					}
-				}
-			}
-
-		}
-
-		if authorized {
-			bucketConfigs = append(bucketConfigs, bucketConfig)
-
+	// Direct user allowlist
+	for _, u := range bucketConfig.AuthorizedUsers {
+		if u == userInfo.Email {
+			return true
 		}
 	}
 
-	c.JSON(200, bucketConfigs)
+	// Group allowlist (including admin group)
+	for _, g := range userInfo.Groups {
+		if g == app.OIDCConfig.AdminGroup {
+			return true
+		}
+		for _, allowed := range bucketConfig.AuthorizedGroups {
+			if g == allowed {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
+func (app *App) ListConnection(c *gin.Context) {
+	userInfo, ok := tokenUserOrRespond(c)
+	if !ok {
+		return
+	}
+
+	configs, ok := listBucketConfigsOrRespond(c, app.DB)
+	if !ok {
+		return
+	}
+
+	c.JSON(200, filterAuthorizedBucketConfigs(*app, userInfo, configs))
+}
+
+func listBucketConfigsOrRespond(c *gin.Context, db *badger.DB) ([]BucketConfig, bool) {
+	raw := scanByPrefix(db, "bucket-")
+
+	cfgs := make([]BucketConfig, 0, len(raw))
+	for _, val := range raw {
+		cfg, err := unmarshalBucketConfig(val)
+		if err != nil {
+			slog.Error(err.Error())
+			c.JSON(400, gin.H{"error": err.Error()})
+			return nil, false
+		}
+		cfgs = append(cfgs, cfg)
+	}
+	return cfgs, true
+}
+
+func unmarshalBucketConfig(b []byte) (BucketConfig, error) {
+	var cfg BucketConfig
+	if err := json.Unmarshal(b, &cfg); err != nil {
+		return BucketConfig{}, err
+	}
+	return cfg, nil
+}
+
+func filterAuthorizedBucketConfigs(app App, userInfo auth.User, cfgs []BucketConfig) []BucketConfig {
+	out := make([]BucketConfig, 0, len(cfgs))
+	for _, cfg := range cfgs {
+		if isAuthorizedForBucket(app, userInfo, cfg) {
+			out = append(out, cfg)
+		}
+	}
+	return out
 }
 
 func (app *App) AddConnection(c *gin.Context) {
@@ -760,8 +846,8 @@ func (app *App) AddConnection(c *gin.Context) {
 	userInfo, _ := auth.TokenToUserData(c.GetHeader("Authorization"))
 
 	if userInfo.Email == "" {
-		slog.Error("failed to get token id")
-		c.JSON(400, gin.H{"error": "failed to get token id"})
+		slog.Error("add connection failed. failed to get token id")
+		c.JSON(400, gin.H{"error": "add connection failed. failed to get token id"})
 		return
 	}
 
@@ -769,7 +855,7 @@ func (app *App) AddConnection(c *gin.Context) {
 	//
 	var bucketConfig BucketConfig
 	if err := c.ShouldBindJSON(&bucketConfig); err != nil {
-		slog.Error("failed to bind json: ", err)
+		slog.Error("add connection failed. failed to bind json: ", err)
 		c.JSON(400, gin.H{"error": err.Error()})
 		return
 	}
@@ -785,7 +871,7 @@ func (app *App) AddConnection(c *gin.Context) {
 
 	// Creating Bucket Instance Connection for User
 	//
-	err = badgerDB.PutKV(app.DB, "bucket-"+bucketConfig.BucketName, res)
+	err = badgerDB.PutKV(app.DB, BucketIdPrefix+bucketConfig.BucketName, res)
 	if err != nil {
 		slog.Error(err.Error())
 		c.JSON(400, gin.H{"error": err.Error()})
@@ -893,7 +979,7 @@ func (app *App) DownloadNative(c *gin.Context) {
 
 	contentType := st.ContentType
 	if contentType == "" {
-		contentType = "application/octet-stream"
+		contentType = OctetStream
 	}
 
 	c.Header("Content-Type", contentType)
@@ -913,7 +999,7 @@ func (app *App) Download(c *gin.Context) {
 
 	var req ObjectDownloadRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		slog.Error("failed to bind json: ", err)
+		slog.Error("download failed. failed to bind json: ", err)
 		c.JSON(400, gin.H{"error": err.Error()})
 		return
 	}
@@ -958,10 +1044,10 @@ func (app *App) Download(c *gin.Context) {
 	slog.Info("Successfully downloaded %s", req.Filename)
 
 	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", req.Filename))
-	c.Header("Content-Type", "application/octet-stream")
+	c.Header("Content-Type", OctetStream)
 	c.Header("Content-Length", fmt.Sprintf("%d", stats.Size))
 
-	c.Data(http.StatusOK, "application/octet-stream", data)
+	c.Data(http.StatusOK, OctetStream, data)
 
 	return
 }
@@ -970,7 +1056,7 @@ func (app *App) Delete(c *gin.Context) {
 
 	var req ObjectDeleteRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		slog.Error("failed to bind json: ", err)
+		slog.Error("delete failed. failed to bind json: ", err)
 		c.JSON(400, gin.H{"error": err.Error()})
 		return
 	}
@@ -1059,93 +1145,46 @@ func (app *App) ListObjects(c *gin.Context) {
 }
 
 func authorizeAndExtract(app App, c *gin.Context, bucketName string) *BucketConfig {
-
-	// Getting User ID from JWT Token
-	//
-	userInfo, _ := auth.TokenToUserData(c.GetHeader("Authorization"))
-
-	if userInfo.Email == "" {
-		slog.Error("failed to get token id")
-		c.JSON(400, gin.H{"error": "failed to get token id"})
+	userInfo, ok := tokenUserOrRespond(c)
+	if !ok {
 		return nil
 	}
 
-	var bucketConfig BucketConfig
-
-	if bucketName == "" {
-		// Obtaining New Bucket Config From User
-		//
-		var req ObjectRequest
-		if err := c.ShouldBindJSON(&req); err != nil {
-			slog.Error("failed to bind json: ", err)
-			c.JSON(400, gin.H{"error": err.Error()})
-			return nil
-		}
-
-		slog.Debug("REQ:", req)
-
-		// Creating Bucket Instance Connection for User
-		//
-		res, err := badgerDB.PullKV(app.DB, "bucket-"+req.BucketName)
-		if err != nil {
-			slog.Error(err.Error())
-			c.JSON(400, gin.H{"error": err.Error()})
-			return nil
-		}
-
-		err = json.Unmarshal(res, &bucketConfig)
-		if err != nil {
-			slog.Error(err.Error())
-			c.JSON(400, gin.H{"error": err.Error()})
-			return nil
-		}
-
-	} else {
-		res, err := badgerDB.PullKV(app.DB, "bucket-"+bucketName)
-		if err != nil {
-			slog.Error(err.Error())
-			c.JSON(400, gin.H{"error": err.Error()})
-			return nil
-		}
-
-		err = json.Unmarshal(res, &bucketConfig)
-		if err != nil {
-			slog.Error(err.Error())
-			c.JSON(400, gin.H{"error": err.Error()})
-			return nil
-		}
+	name, ok := bucketNameOrRespond(c, bucketName)
+	if !ok {
+		return nil
 	}
 
-	authorized := false
-	if userInfo.Administrator {
-		authorized = true
-	} else {
-		for _, user := range bucketConfig.AuthorizedUsers {
-			if user == userInfo.Email {
-				authorized = true
-				break
-			}
-		}
-
-		for _, user := range userInfo.Groups {
-			if user == app.OIDCConfig.AdminGroup {
-				authorized = true
-				break
-			}
-			for _, group := range bucketConfig.AuthorizedGroups {
-
-				if user == group {
-					authorized = true
-					break
-				}
-			}
-		}
+	bucketConfig, ok := getBucketConfigOrRespond(c, app.DB, name)
+	if !ok {
+		return nil
 	}
-	if !authorized {
+
+	if !isAuthorizedForBucket(app, userInfo, bucketConfig) {
 		c.JSON(400, gin.H{"error": "Unauthorized"})
 		return nil
-
 	}
 
 	return &bucketConfig
+}
+
+func bucketNameOrRespond(c *gin.Context, bucketName string) (string, bool) {
+	if strings.TrimSpace(bucketName) != "" {
+		return bucketName, true
+	}
+
+	var req ObjectRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		slog.Error("authorize failed. failed to bind json: ", err)
+		c.JSON(400, gin.H{"error": err.Error()})
+		return "", false
+	}
+
+	name := strings.TrimSpace(req.BucketName)
+	if name == "" {
+		c.JSON(400, gin.H{"error": "bucket is required"})
+		return "", false
+	}
+
+	return name, true
 }

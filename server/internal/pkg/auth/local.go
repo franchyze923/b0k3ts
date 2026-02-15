@@ -16,6 +16,8 @@ var (
 	ErrInvalidUsernameOrPassword = errors.New("invalid username or password")
 	ErrUserAlreadyExists         = errors.New("user already exists")
 	ErrUserNotFound              = errors.New("user not found")
+	UsernameRequired             = "username is required"
+	MarshalUpdatedUserRecord     = "marshal updated user record"
 )
 
 type UserRecord struct {
@@ -44,12 +46,35 @@ func NewStore(db *badger.DB) *Store {
 	}
 }
 
-// UserExists checks if the user key exists in Badger.
-// It does NOT validate password; it only checks presence.
+func (s *Store) bcryptCostOrDefault() int {
+	if s.BcryptCost == 0 {
+		return bcrypt.DefaultCost
+	}
+	return s.BcryptCost
+}
+
+func (s *Store) hashPassword(password string) (string, error) {
+	hashBytes, err := bcrypt.GenerateFromPassword([]byte(password), s.bcryptCostOrDefault())
+	if err != nil {
+		return "", fmt.Errorf("hash password: %w", err)
+	}
+	return string(hashBytes), nil
+}
+
+func (s *Store) putUserRecord(rec *UserRecord) error {
+	rec.UpdatedAt = time.Now().UTC()
+
+	b, err := json.Marshal(rec)
+	if err != nil {
+		return fmt.Errorf(MarshalUpdatedUserRecord+": %w", err)
+	}
+	return badgerKV.PutKV(s.DB, userKey(rec.Username), b)
+}
+
 func (s *Store) UserExists(username string) (bool, error) {
 	username = normalizeUsername(username)
 	if username == "" {
-		return false, errors.New("username is required")
+		return false, errors.New(UsernameRequired)
 	}
 
 	_, err := badgerKV.PullKV(s.DB, userKey(username))
@@ -86,7 +111,7 @@ func (s *Store) EnsureUser(username, password string, administrator bool) (creat
 func (s *Store) CreateUser(username, password string, administrator bool) error {
 	username = normalizeUsername(username)
 	if username == "" {
-		return errors.New("username is required")
+		return errors.New(UsernameRequired)
 	}
 	if password == "" {
 		return errors.New("password is required")
@@ -99,20 +124,15 @@ func (s *Store) CreateUser(username, password string, administrator bool) error 
 		return err
 	}
 
-	cost := s.BcryptCost
-	if cost == 0 {
-		cost = bcrypt.DefaultCost
-	}
-
-	hashBytes, err := bcrypt.GenerateFromPassword([]byte(password), cost)
+	hash, err := s.hashPassword(password)
 	if err != nil {
-		return fmt.Errorf("hash password: %w", err)
+		return err
 	}
 
 	now := time.Now().UTC()
 	rec := UserRecord{
 		Username:      username,
-		PasswordHash:  string(hashBytes),
+		PasswordHash:  hash,
 		CreatedAt:     now,
 		UpdatedAt:     now,
 		Disabled:      false,
@@ -132,7 +152,7 @@ func (s *Store) CreateUser(username, password string, administrator bool) error 
 func (s *Store) GetUser(username string) (*UserRecord, error) {
 	username = normalizeUsername(username)
 	if username == "" {
-		return nil, errors.New("username is required")
+		return nil, errors.New(UsernameRequired)
 	}
 
 	b, err := badgerKV.PullKV(s.DB, userKey(username))
@@ -192,25 +212,13 @@ func (s *Store) ChangePassword(username, oldPassword, newPassword string) error 
 		return errors.New("new password is required")
 	}
 
-	cost := s.BcryptCost
-	if cost == 0 {
-		cost = bcrypt.DefaultCost
-	}
-
-	hashBytes, err := bcrypt.GenerateFromPassword([]byte(newPassword), cost)
+	hash, err := s.hashPassword(newPassword)
 	if err != nil {
-		return fmt.Errorf("hash new password: %w", err)
+		return err
 	}
 
-	rec.PasswordHash = string(hashBytes)
-	rec.UpdatedAt = time.Now().UTC()
-
-	b, err := json.Marshal(rec)
-	if err != nil {
-		return fmt.Errorf("marshal updated user record: %w", err)
-	}
-
-	return badgerKV.PutKV(s.DB, userKey(rec.Username), b)
+	rec.PasswordHash = hash
+	return s.putUserRecord(rec)
 }
 
 func (s *Store) DisableUser(username string, disabled bool) error {
@@ -223,7 +231,7 @@ func (s *Store) DisableUser(username string, disabled bool) error {
 
 	b, err := json.Marshal(rec)
 	if err != nil {
-		return fmt.Errorf("marshal updated user record: %w", err)
+		return fmt.Errorf(MarshalUpdatedUserRecord+": %w", err)
 	}
 	return badgerKV.PutKV(s.DB, userKey(username), b)
 }
@@ -231,7 +239,7 @@ func (s *Store) DisableUser(username string, disabled bool) error {
 func (s *Store) DeleteUser(username string) error {
 	username = normalizeUsername(username)
 	if username == "" {
-		return errors.New("username is required")
+		return errors.New(UsernameRequired)
 	}
 	return badgerKV.DeleteKV(s.DB, userKey(username))
 }
@@ -256,7 +264,7 @@ func isKeyNotFound(err error) bool {
 func (s *Store) UpdatePassword(username, newPassword string) error {
 	username = normalizeUsername(username)
 	if username == "" {
-		return errors.New("username is required")
+		return errors.New(UsernameRequired)
 	}
 	if newPassword == "" {
 		return errors.New("new password is required")
@@ -270,23 +278,11 @@ func (s *Store) UpdatePassword(username, newPassword string) error {
 		return ErrInvalidUsernameOrPassword
 	}
 
-	cost := s.BcryptCost
-	if cost == 0 {
-		cost = bcrypt.DefaultCost
-	}
-
-	hashBytes, err := bcrypt.GenerateFromPassword([]byte(newPassword), cost)
+	hash, err := s.hashPassword(newPassword)
 	if err != nil {
-		return fmt.Errorf("hash new password: %w", err)
+		return err
 	}
 
-	rec.PasswordHash = string(hashBytes)
-	rec.UpdatedAt = time.Now().UTC()
-
-	b, err := json.Marshal(rec)
-	if err != nil {
-		return fmt.Errorf("marshal updated user record: %w", err)
-	}
-
-	return badgerKV.PutKV(s.DB, userKey(rec.Username), b)
+	rec.PasswordHash = hash
+	return s.putUserRecord(rec)
 }

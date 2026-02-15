@@ -28,10 +28,6 @@ func New() *App {
 	}
 }
 
-func (app *App) Stop() {
-
-}
-
 func (app *App) Preflight() {
 
 	// Create default user

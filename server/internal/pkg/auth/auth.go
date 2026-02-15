@@ -29,14 +29,14 @@ type LocalClaims struct {
 	jwt.StandardClaims
 }
 
-// LocalLogin validates local username/password and returns a signed JWT for the frontend.
-// If you want the exact same behavior as OIDC (redirect with token), use LocalLoginRedirect below.
-func (auth *Auth) LocalLogin(c *gin.Context) {
+const JWRErr = "server jwt secret is not configured"
+
+func (auth *Auth) bindAndValidateLocalUser(c *gin.Context) (*UserRecord, bool) {
 	var req LocalLoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		slog.Error("failed to bind json: ", err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
+		return nil, false
 	}
 
 	store := NewStore(auth.BadgerDB)
@@ -44,9 +44,22 @@ func (auth *Auth) LocalLogin(c *gin.Context) {
 	if err != nil {
 		// Keep this generic to avoid user enumeration.
 		c.JSON(http.StatusUnauthorized, gin.H{"error": ErrInvalidUsernameOrPassword.Error()})
-		return
+		return nil, false
 	}
 
+	return rec, true
+}
+
+func (auth *Auth) jwtSecretOrRespond(c *gin.Context) (string, bool) {
+	secret := strings.TrimSpace(auth.ServerConfig.JWTSecret)
+	if secret == "" {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": JWRErr})
+		return "", false
+	}
+	return secret, true
+}
+
+func (auth *Auth) signLocalJWT(rec *UserRecord) (string, error) {
 	// Token TTL (pick what you want)
 	const tokenTTL = 24 * time.Hour
 
@@ -65,12 +78,20 @@ func (auth *Auth) LocalLogin(c *gin.Context) {
 	tok := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 
 	secret := strings.TrimSpace(auth.ServerConfig.JWTSecret)
-	if secret == "" {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "server jwt secret is not configured"})
+	return tok.SignedString([]byte(secret))
+}
+
+func (auth *Auth) LocalLogin(c *gin.Context) {
+	rec, ok := auth.bindAndValidateLocalUser(c)
+	if !ok {
 		return
 	}
 
-	signed, err := tok.SignedString([]byte(secret))
+	if _, ok := auth.jwtSecretOrRespond(c); !ok {
+		return
+	}
+
+	signed, err := auth.signLocalJWT(rec)
 	if err != nil {
 		slog.Error("failed to sign token: ", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to sign token"})
@@ -84,47 +105,17 @@ func (auth *Auth) LocalLogin(c *gin.Context) {
 	})
 }
 
-// LocalLoginRedirect does the same as LocalLogin, but redirects the browser to your frontend,
-// matching your OIDC "PassRedirectUrl + token" pattern.
 func (auth *Auth) LocalLoginRedirect(c *gin.Context) {
-
-	var req LocalLoginRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		slog.Error("failed to bind json: ", err)
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	rec, ok := auth.bindAndValidateLocalUser(c)
+	if !ok {
 		return
 	}
 
-	store := NewStore(auth.BadgerDB)
-	rec, err := store.ValidateUser(req.Username, req.Password)
-	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": ErrInvalidUsernameOrPassword.Error()})
+	if _, ok := auth.jwtSecretOrRespond(c); !ok {
 		return
 	}
 
-	const tokenTTL = 24 * time.Hour
-	now := time.Now().UTC()
-
-	claims := LocalClaims{
-		Username:      rec.Username,
-		Email:         rec.Email,
-		Administrator: rec.Administrator,
-		StandardClaims: jwt.StandardClaims{
-			Subject:   rec.Username,
-			IssuedAt:  now.Unix(),
-			ExpiresAt: now.Add(tokenTTL).Unix(),
-		},
-	}
-
-	tok := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-
-	secret := strings.TrimSpace(auth.ServerConfig.JWTSecret)
-	if secret == "" {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "server jwt secret is not configured"})
-		return
-	}
-
-	signed, err := tok.SignedString([]byte(secret))
+	signed, err := auth.signLocalJWT(rec)
 	if err != nil {
 		slog.Error("failed to sign token: ", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to sign token"})
@@ -135,7 +126,6 @@ func (auth *Auth) LocalLoginRedirect(c *gin.Context) {
 	c.Redirect(http.StatusSeeOther, auth.OIDCConfig.PassRedirectUrl+signed)
 }
 
-// LocalAuthorize validates the local JWT from Authorization: Bearer <token>
 func (auth *Auth) LocalAuthorize(c *gin.Context) {
 	authHeader := c.GetHeader("Authorization")
 
@@ -156,9 +146,8 @@ func (auth *Auth) LocalAuthorize(c *gin.Context) {
 		return
 	}
 
-	secret := strings.TrimSpace(auth.ServerConfig.JWTSecret)
-	if secret == "" {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "server jwt secret is not configured"})
+	secret, ok := auth.jwtSecretOrRespond(c)
+	if !ok {
 		return
 	}
 

@@ -11,22 +11,16 @@ COPY . .
 
 RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o b0k3ts ./cmd/b0k3ts/main.go
 
-FROM alpine:latest
+FROM alpine:3.22.0
 
 
-RUN apk --no-cache add ca-certificates
-
-RUN apk update && apk upgrade
-
-RUN adduser b0k3ts -D
-
-RUN mkdir /var/log/b0k3ts/
-
-RUN mkdir -p /opt/b0k3ts/data/
-
-RUN chown b0k3ts /var/log/b0k3ts/
-
-RUN chown b0k3ts /opt/b0k3ts/data/
+RUN apk --no-cache add ca-certificates &&  \
+    apk update && apk upgrade && \
+    adduser b0k3ts -D && \
+    mkdir /var/log/b0k3ts/ && \
+    mkdir -p /opt/b0k3ts/data/ &&  \
+    chown b0k3ts /var/log/b0k3ts/ &&  \
+    chown b0k3ts /opt/b0k3ts/data/
 
 WORKDIR /app/
 

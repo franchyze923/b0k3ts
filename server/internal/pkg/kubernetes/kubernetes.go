@@ -42,8 +42,10 @@ const (
 	queryMode   = "mode"
 	queryConfig = "config"
 
-	modeInCluster  = "incluster"
-	modeKubeconfig = "kubeconfig"
+	modeInCluster                = "incluster"
+	modeKubeconfig               = "kubeconfig"
+	kubernetesClientBuildFailure = "failed to build kubernetes client"
+	namespaceRequiredError       = "namespace is required"
 )
 
 var (
@@ -114,7 +116,7 @@ func ValidateKubeconfigName(name string) error {
 
 func SaveKubeconfig(db *badger.DB, name string, kubeconfigBytes []byte) error {
 	if db == nil {
-		return errors.New("badger db is nil")
+		return errors.New("save kubeconfig failed. badger db is nil")
 	}
 	if err := ValidateKubeconfigName(name); err != nil {
 		return err
@@ -138,7 +140,7 @@ func SaveKubeconfig(db *badger.DB, name string, kubeconfigBytes []byte) error {
 
 func GetKubeconfig(db *badger.DB, name string) ([]byte, error) {
 	if db == nil {
-		return nil, errors.New("badger db is nil")
+		return nil, errors.New("get kubeconfig failed. badger db is nil")
 	}
 	if err := ValidateKubeconfigName(name); err != nil {
 		return nil, err
@@ -148,7 +150,7 @@ func GetKubeconfig(db *badger.DB, name string) ([]byte, error) {
 
 func DeleteKubeconfig(db *badger.DB, name string) error {
 	if db == nil {
-		return errors.New("badger db is nil")
+		return errors.New("delete kubeconfig failed. badger db is nil")
 	}
 	if err := ValidateKubeconfigName(name); err != nil {
 		return err
@@ -158,7 +160,7 @@ func DeleteKubeconfig(db *badger.DB, name string) error {
 
 func ListKubeconfigNames(db *badger.DB) ([]string, error) {
 	if db == nil {
-		return nil, errors.New("badger db is nil")
+		return nil, errors.New("list kubeconfig failed. badger db is nil")
 	}
 
 	var names []string
@@ -288,10 +290,10 @@ func (h *handler) buildClientsFromRequest(c *gin.Context) (dynamic.Interface, *k
 
 func ListObjectBucketClaims(ctx context.Context, dyn dynamic.Interface, namespace string) (*unstructured.UnstructuredList, error) {
 	if dyn == nil {
-		return nil, errors.New("dynamic client is nil")
+		return nil, errors.New("list object failed. dynamic client is nil")
 	}
 	if strings.TrimSpace(namespace) == "" {
-		return nil, errors.New("namespace is required")
+		return nil, errors.New(namespaceRequiredError)
 	}
 
 	return dyn.Resource(obcGVR).Namespace(namespace).List(ctx, metav1.ListOptions{})
@@ -299,10 +301,10 @@ func ListObjectBucketClaims(ctx context.Context, dyn dynamic.Interface, namespac
 
 func ApplyObjectBucketClaim(ctx context.Context, dyn dynamic.Interface, namespace string, manifestYAMLorJSON []byte, fieldManager string) (*unstructured.Unstructured, error) {
 	if dyn == nil {
-		return nil, errors.New("dynamic client is nil")
+		return nil, errors.New("apply object bucket failed. dynamic client is nil")
 	}
 	if strings.TrimSpace(namespace) == "" {
-		return nil, errors.New("namespace is required")
+		return nil, errors.New(namespaceRequiredError)
 	}
 	if len(manifestYAMLorJSON) == 0 {
 		return nil, errors.New("manifest body is empty")
@@ -363,10 +365,10 @@ func ApplyObjectBucketClaim(ctx context.Context, dyn dynamic.Interface, namespac
 
 func DeleteObjectBucketClaim(ctx context.Context, dyn dynamic.Interface, namespace, name string) error {
 	if dyn == nil {
-		return errors.New("dynamic client is nil")
+		return errors.New("delete object failed. dynamic client is nil")
 	}
 	if strings.TrimSpace(namespace) == "" {
-		return errors.New("namespace is required")
+		return errors.New(namespaceRequiredError)
 	}
 	if strings.TrimSpace(name) == "" {
 		return errors.New("name is required")
@@ -403,7 +405,7 @@ func GetBucketSecretCreds(ctx context.Context, core *kubernetes.Clientset, names
 		return SecretCredsResponse{}, errors.New("core client is nil")
 	}
 	if strings.TrimSpace(namespace) == "" {
-		return SecretCredsResponse{}, errors.New("namespace is required")
+		return SecretCredsResponse{}, errors.New(namespaceRequiredError)
 	}
 	if strings.TrimSpace(bucketName) == "" {
 		return SecretCredsResponse{}, errors.New("bucket name is required")
@@ -511,7 +513,7 @@ func (h *handler) ListObjectBucketClaims(c *gin.Context) {
 	namespace := strings.TrimSpace(c.Param("namespace"))
 	dyn, _, err := h.buildClientsFromRequest(c)
 	if err != nil {
-		slog.Error("failed to build kubernetes clients", "err", err)
+		slog.Error(kubernetesClientBuildFailure, "err", err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
@@ -560,7 +562,7 @@ func (h *handler) ApplyObjectBucketClaim(c *gin.Context) {
 
 	dyn, _, err := h.buildClientsFromRequest(c)
 	if err != nil {
-		slog.Error("failed to build kubernetes clients", "err", err)
+		slog.Error(kubernetesClientBuildFailure, "err", err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
@@ -591,7 +593,7 @@ func (h *handler) DeleteObjectBucketClaim(c *gin.Context) {
 
 	dyn, _, err := h.buildClientsFromRequest(c)
 	if err != nil {
-		slog.Error("failed to build kubernetes clients", "err", err)
+		slog.Error(kubernetesClientBuildFailure, "err", err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
@@ -614,7 +616,7 @@ func (h *handler) GetObjectBucketClaimSecretCreds(c *gin.Context) {
 
 	_, core, err := h.buildClientsFromRequest(c)
 	if err != nil {
-		slog.Error("failed to build kubernetes clients", "err", err)
+		slog.Error(kubernetesClientBuildFailure, "err", err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}

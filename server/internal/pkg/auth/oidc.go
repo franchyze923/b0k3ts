@@ -22,6 +22,8 @@ import (
 	"golang.org/x/oauth2"
 )
 
+const OIDCConfigVar = "oidc-config"
+
 type Auth struct {
 	ServerConfig configs.ServerConfig
 	OIDCConfig   configs.OIDC
@@ -70,7 +72,7 @@ func New(config configs.ServerConfig, oidcConfig configs.OIDC, db *badger.DB) *A
 
 func (auth *Auth) GetConfig(c *gin.Context) {
 
-	ret, err := badgerDB.PullKV(auth.BadgerDB, "oidc-config")
+	ret, err := badgerDB.PullKV(auth.BadgerDB, OIDCConfigVar)
 	if err != nil {
 		slog.Error(err.Error())
 		c.JSON(500, gin.H{"error": err.Error()})
@@ -99,7 +101,7 @@ func (auth *Auth) Configure(c *gin.Context) {
 
 	// Saving Config on Badger
 	//
-	err = badgerDB.PutKV(auth.BadgerDB, "oidc-config", ret)
+	err = badgerDB.PutKV(auth.BadgerDB, OIDCConfigVar, ret)
 	if err != nil {
 		slog.Error(err.Error())
 		os.Exit(1)
@@ -107,7 +109,7 @@ func (auth *Auth) Configure(c *gin.Context) {
 
 	var oic configs.OIDC
 
-	res, err := badgerDB.PullKV(auth.BadgerDB, "oidc-config")
+	res, err := badgerDB.PullKV(auth.BadgerDB, OIDCConfigVar)
 	if err != nil {
 		if err.Error() == "Key not found" {
 			slog.Info("OIDC Not Configured")
