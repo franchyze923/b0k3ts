@@ -6,32 +6,56 @@
 
   <mat-card-content>
     <div class="grid">
-      <mat-form-field appearance="outline">
+      <mat-form-field
+        appearance="outline"
+        matTooltip="A unique name you choose to identify this connection inside b0k3ts. Not sent to S3."
+        matTooltipPosition="above"
+      >
         <mat-label>BucketId</mat-label>
         <input matInput [(ngModel)]="draft().bucket_id" placeholder="my-bucket-id" />
       </mat-form-field>
 
-      <mat-form-field appearance="outline">
+      <mat-form-field
+        appearance="outline"
+        matTooltip="The S3-compatible host and port, e.g. 192.168.1.10:9000 or s3.example.com"
+        matTooltipPosition="above"
+      >
         <mat-label>Endpoint</mat-label>
         <input matInput [(ngModel)]="draft().endpoint" placeholder="https://s3.example.com" />
       </mat-form-field>
 
-      <mat-form-field appearance="outline">
+      <mat-form-field
+        appearance="outline"
+        matTooltip="The actual bucket name in S3/Ceph. Must match exactly — for Rook OBCs this is usually auto-generated with a UUID suffix."
+        matTooltipPosition="above"
+      >
         <mat-label>BucketName</mat-label>
         <input matInput [(ngModel)]="draft().bucket_name" placeholder="photos" />
       </mat-form-field>
 
-      <mat-form-field appearance="outline">
+      <mat-form-field
+        appearance="outline"
+        matTooltip="S3 region. Leave blank or use 'us-east-1' for Ceph/MinIO — it is ignored but required by some clients."
+        matTooltipPosition="above"
+      >
         <mat-label>Location</mat-label>
         <input matInput [(ngModel)]="draft().location" placeholder="us-east-1" />
       </mat-form-field>
 
-      <mat-form-field appearance="outline">
+      <mat-form-field
+        appearance="outline"
+        matTooltip="The S3 Access Key ID used to authenticate with the bucket endpoint."
+        matTooltipPosition="above"
+      >
         <mat-label>AccessKeyId</mat-label>
         <input matInput [(ngModel)]="draft().access_key_id" placeholder="AKIA..." />
       </mat-form-field>
 
-      <mat-form-field appearance="outline">
+      <mat-form-field
+        appearance="outline"
+        matTooltip="The S3 Secret Access Key paired with the Access Key ID above."
+        matTooltipPosition="above"
+      >
         <mat-label>SecretAccessKey</mat-label>
         <input
           matInput
@@ -41,7 +65,11 @@
         />
       </mat-form-field>
 
-      <mat-slide-toggle [(ngModel)]="draft().secure">Secure</mat-slide-toggle>
+      <mat-slide-toggle
+        [(ngModel)]="draft().secure"
+        matTooltip="Enable if the endpoint uses HTTPS/TLS. Disable for plain HTTP."
+        matTooltipPosition="above"
+      >Secure</mat-slide-toggle>
 
       <mat-form-field appearance="outline" class="full">
         <mat-label>Authorized Users (emails)</mat-label>

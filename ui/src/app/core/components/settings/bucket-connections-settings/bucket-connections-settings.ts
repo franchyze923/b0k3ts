@@ -15,6 +15,7 @@ import {
   MatAutocompleteModule,
   MatAutocompleteSelectedEvent,
 } from '@angular/material/autocomplete';
+import { MatTooltipModule } from '@angular/material/tooltip';
 
 import { GlobalService } from '../../../services/global';
 import { BucketConfig, BucketConfigsService } from '../../../services/bucket-configs';
@@ -36,6 +37,7 @@ type BucketDraft = BucketConfig;
     MatSnackBarModule,
     MatChipsModule,
     MatAutocompleteModule,
+    MatTooltipModule,
   ],
   templateUrl: './bucket-connections-settings.html',
   styleUrl: './bucket-connections-settings.scss',
